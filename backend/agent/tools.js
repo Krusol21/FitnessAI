@@ -1,0 +1,261 @@
+const { getDb } = require('../database');
+const { v4: uuidv4 } = require('uuid');
+
+const TOOL_DEFINITIONS = [
+  {
+    name: 'get_user_profile',
+    description: 'Get the user\'s profile including goal, target weight, latest weight, and current cycle info.',
+    input_schema: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    name: 'log_weight',
+    description: 'Log the user\'s body weight.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        weight_lbs: { type: 'number', description: 'Body weight in pounds' },
+        logged_at: { type: 'string', description: 'ISO date string (optional, defaults to now)' },
+      },
+      required: ['weight_lbs'],
+    },
+  },
+  {
+    name: 'get_prs',
+    description: 'Get the user\'s current personal records (best sets) per exercise.',
+    input_schema: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    name: 'update_pr',
+    description: 'Log a new personal record for an exercise.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        exercise_name: { type: 'string', description: 'Name of the exercise (e.g. "Back Squat", "Bench Press")' },
+        weight_lbs: { type: 'number', description: 'Weight lifted in pounds' },
+        reps: { type: 'integer', description: 'Number of reps completed at that weight' },
+      },
+      required: ['exercise_name', 'weight_lbs', 'reps'],
+    },
+  },
+  {
+    name: 'log_food',
+    description: 'Log a food item the user ate. Saves the food to their library if new, then records the log entry.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        calories: { type: 'number' },
+        protein_g: { type: 'number' },
+        carbs_g: { type: 'number' },
+        fat_g: { type: 'number' },
+        serving_size: { type: 'number' },
+        serving_unit: { type: 'string' },
+        servings: { type: 'number', description: 'Number of servings consumed (default 1)' },
+        logged_at: { type: 'string' },
+      },
+      required: ['name', 'calories'],
+    },
+  },
+  {
+    name: 'search_food_library',
+    description: 'Search the user\'s food library by name to find previously saved foods.',
+    input_schema: {
+      type: 'object',
+      properties: { query: { type: 'string' } },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'get_nutrition_summary',
+    description: 'Get today\'s (or a specific date\'s) macro totals from logged food.',
+    input_schema: {
+      type: 'object',
+      properties: { date: { type: 'string', description: 'YYYY-MM-DD (optional, defaults to today)' } },
+      required: [],
+    },
+  },
+  {
+    name: 'get_workout_plan',
+    description: 'Get the user\'s current active workout plan, including cycle week and phase (build/deload/off).',
+    input_schema: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    name: 'create_workout_plan',
+    description: 'Create and activate a new personalized workout plan. MUST be called whenever you build or update a training program — do not just describe a plan in text without calling this tool.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        plan_json: {
+          type: 'object',
+          description: 'Must use exactly these keys: squat_day, bench_day, deadlift_day.',
+          properties: {
+            squat_day: {
+              type: 'object',
+              properties: {
+                main_lift: { type: 'object', properties: { name: { type: 'string' }, sets: { type: 'integer' }, reps: { type: 'string' }, notes: { type: 'string' } }, required: ['name', 'sets', 'reps'] },
+                accessories: { type: 'array', items: { type: 'object', properties: { name: { type: 'string' }, sets: { type: 'integer' }, reps: { type: 'string' }, notes: { type: 'string' } }, required: ['name', 'sets', 'reps'] } },
+              },
+              required: ['main_lift', 'accessories'],
+            },
+            bench_day: {
+              type: 'object',
+              properties: {
+                main_lift: { type: 'object', properties: { name: { type: 'string' }, sets: { type: 'integer' }, reps: { type: 'string' }, notes: { type: 'string' } }, required: ['name', 'sets', 'reps'] },
+                accessories: { type: 'array', items: { type: 'object', properties: { name: { type: 'string' }, sets: { type: 'integer' }, reps: { type: 'string' }, notes: { type: 'string' } }, required: ['name', 'sets', 'reps'] } },
+              },
+              required: ['main_lift', 'accessories'],
+            },
+            deadlift_day: {
+              type: 'object',
+              properties: {
+                main_lift: { type: 'object', properties: { name: { type: 'string' }, sets: { type: 'integer' }, reps: { type: 'string' }, notes: { type: 'string' } }, required: ['name', 'sets', 'reps'] },
+                accessories: { type: 'array', items: { type: 'object', properties: { name: { type: 'string' }, sets: { type: 'integer' }, reps: { type: 'string' }, notes: { type: 'string' } }, required: ['name', 'sets', 'reps'] } },
+              },
+              required: ['main_lift', 'accessories'],
+            },
+            notes: { type: 'string' },
+          },
+          required: ['squat_day', 'bench_day', 'deadlift_day'],
+        },
+        cycle_start_date: { type: 'string', description: 'YYYY-MM-DD (defaults to today)' },
+      },
+      required: ['name', 'plan_json'],
+    },
+  },
+  {
+    name: 'log_workout',
+    description: 'Log completed sets for a workout exercise.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        day_type: { type: 'string', enum: ['squat', 'bench', 'deadlift'] },
+        exercise_name: { type: 'string' },
+        sets_completed: { type: 'integer' },
+        cycle_week: { type: 'integer' },
+        plan_id: { type: 'string' },
+      },
+      required: ['day_type', 'exercise_name', 'sets_completed', 'cycle_week'],
+    },
+  },
+];
+
+async function executeTool(toolName, toolInput, userId) {
+  const db = getDb();
+
+  if (toolName === 'get_user_profile') {
+    const user = await db.prepare('SELECT email, goal, target_weight_lbs, created_at FROM users WHERE id = ?').get([userId]);
+    const latestWeight = await db.prepare('SELECT weight_lbs, logged_at FROM weight_logs WHERE user_id = ? ORDER BY logged_at DESC LIMIT 1').get([userId]);
+    const weightCount = await db.prepare('SELECT COUNT(*) as c FROM weight_logs WHERE user_id = ?').get([userId]);
+    const plan = await db.prepare('SELECT id, name, cycle_start_date FROM workout_plans WHERE user_id = ? AND is_active = 1').get([userId]);
+    let cycleWeek = null, phase = null;
+    if (plan?.cycle_start_date) {
+      const days = Math.floor((Date.now() - new Date(plan.cycle_start_date)) / 86400000);
+      cycleWeek = (Math.floor(days / 7) % 14) + 1;
+      phase = cycleWeek === 7 ? 'deload' : cycleWeek === 14 ? 'off' : 'build';
+    }
+    return JSON.stringify({ ...user, latest_weight: latestWeight, weight_entries_total: weightCount?.c, active_plan: plan ? { ...plan, cycle_week: cycleWeek, phase } : null });
+  }
+
+  if (toolName === 'log_weight') {
+    const id = uuidv4();
+    await db.prepare('INSERT INTO weight_logs (id, user_id, weight_lbs, logged_at) VALUES (?, ?, ?, ?)')
+      .run([id, userId, toolInput.weight_lbs, toolInput.logged_at || new Date().toISOString()]);
+    return JSON.stringify({ ok: true, id, weight_lbs: toolInput.weight_lbs });
+  }
+
+  if (toolName === 'get_prs') {
+    const prs = await db.prepare(`
+      SELECT exercise_name, MAX(weight_lbs) as best_weight_lbs, reps, MAX(logged_at) as logged_at
+      FROM pr_logs WHERE user_id = ?
+      GROUP BY exercise_name, reps ORDER BY exercise_name ASC
+    `).all([userId]);
+    return JSON.stringify(prs);
+  }
+
+  if (toolName === 'update_pr') {
+    const id = uuidv4();
+    await db.prepare('INSERT INTO pr_logs (id, user_id, exercise_name, weight_lbs, reps, logged_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run([id, userId, toolInput.exercise_name, toolInput.weight_lbs, toolInput.reps, new Date().toISOString()]);
+    return JSON.stringify({ ok: true, id });
+  }
+
+  if (toolName === 'log_food') {
+    const foodId = uuidv4();
+    await db.prepare(`
+      INSERT INTO foods (id, user_id, name, calories, protein_g, carbs_g, fat_g, serving_size, serving_unit)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(user_id, name) DO UPDATE SET
+        calories = EXCLUDED.calories, protein_g = EXCLUDED.protein_g,
+        carbs_g = EXCLUDED.carbs_g, fat_g = EXCLUDED.fat_g,
+        serving_size = EXCLUDED.serving_size, serving_unit = EXCLUDED.serving_unit
+    `).run([foodId, userId, toolInput.name, toolInput.calories, toolInput.protein_g || 0, toolInput.carbs_g || 0, toolInput.fat_g || 0, toolInput.serving_size || 1, toolInput.serving_unit || 'serving']);
+    const food = await db.prepare('SELECT id FROM foods WHERE user_id = ? AND name = ?').get([userId, toolInput.name]);
+    const logId = uuidv4();
+    await db.prepare('INSERT INTO nutrition_logs (id, user_id, food_id, servings, logged_at) VALUES (?, ?, ?, ?, ?)')
+      .run([logId, userId, food.id, toolInput.servings || 1, toolInput.logged_at || new Date().toISOString()]);
+    return JSON.stringify({ ok: true, food_id: food.id, log_id: logId });
+  }
+
+  if (toolName === 'search_food_library') {
+    const foods = await db.prepare("SELECT * FROM foods WHERE user_id = ? AND name ILIKE ? ORDER BY name ASC LIMIT 10").all([userId, `%${toolInput.query}%`]);
+    return JSON.stringify(foods);
+  }
+
+  if (toolName === 'get_nutrition_summary') {
+    const date = toolInput.date || new Date().toISOString().split('T')[0];
+    const totals = await db.prepare(`
+      SELECT COUNT(*) as entries,
+        ROUND(SUM(nl.servings * f.calories)::numeric, 1) as total_calories,
+        ROUND(SUM(nl.servings * f.protein_g)::numeric, 1) as total_protein_g,
+        ROUND(SUM(nl.servings * f.carbs_g)::numeric, 1) as total_carbs_g,
+        ROUND(SUM(nl.servings * f.fat_g)::numeric, 1) as total_fat_g
+      FROM nutrition_logs nl JOIN foods f ON f.id = nl.food_id
+      WHERE nl.user_id = ? AND nl.logged_at::date = ?::date
+    `).get([userId, date]);
+    const items = await db.prepare(`
+      SELECT f.name, nl.servings, f.calories, f.protein_g, f.carbs_g, f.fat_g
+      FROM nutrition_logs nl JOIN foods f ON f.id = nl.food_id
+      WHERE nl.user_id = ? AND nl.logged_at::date = ?::date ORDER BY nl.logged_at ASC
+    `).all([userId, date]);
+    return JSON.stringify({ date, ...totals, items });
+  }
+
+  if (toolName === 'get_workout_plan') {
+    const plan = await db.prepare('SELECT * FROM workout_plans WHERE user_id = ? AND is_active = 1 ORDER BY created_at DESC LIMIT 1').get([userId]);
+    if (!plan) return JSON.stringify(null);
+    let cycleWeek = null, phase = 'build';
+    if (plan.cycle_start_date) {
+      const days = Math.floor((Date.now() - new Date(plan.cycle_start_date)) / 86400000);
+      cycleWeek = (Math.floor(days / 7) % 14) + 1;
+      phase = cycleWeek === 7 ? 'deload' : cycleWeek === 14 ? 'off' : 'build';
+    }
+    return JSON.stringify({ ...plan, plan_json: JSON.parse(plan.plan_json), cycle_week: cycleWeek, phase });
+  }
+
+  if (toolName === 'create_workout_plan') {
+    console.log('[tool] create_workout_plan called, name:', toolInput.name);
+    console.log('[tool] plan_json keys:', Object.keys(toolInput.plan_json || {}));
+    await db.prepare('UPDATE workout_plans SET is_active = 0 WHERE user_id = ?').run([userId]);
+    const id = uuidv4();
+    await db.prepare(`
+      INSERT INTO workout_plans (id, user_id, name, plan_json, is_active, cycle_start_date)
+      VALUES (?, ?, ?, ?, 1, ?)
+    `).run([id, userId, toolInput.name, JSON.stringify(toolInput.plan_json), toolInput.cycle_start_date || new Date().toISOString().split('T')[0]]);
+    console.log('[tool] plan saved with id:', id);
+    return JSON.stringify({ ok: true, id, name: toolInput.name });
+  }
+
+  if (toolName === 'log_workout') {
+    const id = uuidv4();
+    await db.prepare(`
+      INSERT INTO workout_logs (id, user_id, plan_id, cycle_week, day_type, exercise_name, sets_completed, logged_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run([id, userId, toolInput.plan_id || null, toolInput.cycle_week, toolInput.day_type, toolInput.exercise_name, toolInput.sets_completed, new Date().toISOString()]);
+    return JSON.stringify({ ok: true, id });
+  }
+
+  return JSON.stringify({ error: `Unknown tool: ${toolName}` });
+}
+
+module.exports = { TOOL_DEFINITIONS, executeTool };

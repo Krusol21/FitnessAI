@@ -1,0 +1,307 @@
+import { useState, useEffect, useRef } from 'react';
+import client from '../api/client';
+
+const EMPTY_FOOD = { name: '', calories: '', protein_g: '', carbs_g: '', fat_g: '', serving_size: '1', serving_unit: 'serving', servings: '1' };
+
+export default function NutritionLog() {
+  const [logs, setLogs] = useState([]);
+  const [summary, setSummary] = useState(null);
+  const [foods, setFoods] = useState([]);
+  const [form, setForm] = useState(EMPTY_FOOD);
+  const [suggestions, setSuggestions] = useState([]);
+  const [showForm, setShowForm] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [scanPreview, setScanPreview] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const cameraRef = useRef(null);
+  const today = new Date().toISOString().split('T')[0];
+
+  function load() {
+    client.get(`/nutrition/logs?date=${today}`).then(r => setLogs(r.data)).catch(() => {});
+    client.get(`/nutrition/summary?date=${today}`).then(r => setSummary(r.data)).catch(() => {});
+  }
+
+  useEffect(() => { load(); }, []);
+
+  async function searchFoods(q) {
+    if (!q || q.length < 2) { setSuggestions([]); return; }
+    try {
+      const { data } = await client.get(`/nutrition/foods?q=${encodeURIComponent(q)}`);
+      setSuggestions(data);
+    } catch {}
+  }
+
+  function selectSuggestion(food) {
+    setForm({
+      name: food.name,
+      calories: food.calories,
+      protein_g: food.protein_g,
+      carbs_g: food.carbs_g,
+      fat_g: food.fat_g,
+      serving_size: food.serving_size,
+      serving_unit: food.serving_unit,
+      servings: '1',
+    });
+    setSuggestions([]);
+  }
+
+  async function handleScan(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setScanPreview(URL.createObjectURL(file));
+    setScanning(true);
+    setError('');
+    try {
+      const fd = new FormData();
+      fd.append('image', file);
+      const { data } = await client.post('/scan', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setForm(f => ({
+        ...f,
+        name: data.name || '',
+        calories: data.calories ?? '',
+        protein_g: data.protein_g ?? '',
+        carbs_g: data.carbs_g ?? '',
+        fat_g: data.fat_g ?? '',
+        serving_size: data.serving_size ?? '1',
+        serving_unit: data.serving_unit || 'serving',
+        servings: '1',
+      }));
+      setShowForm(true);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not read nutrition from image');
+    } finally {
+      setScanning(false);
+    }
+  }
+
+  async function submitLog(e) {
+    e.preventDefault();
+    if (!form.name || !form.calories) return;
+    setSubmitting(true);
+    setError('');
+    try {
+      // Upsert food to library
+      const { data: food } = await client.post('/nutrition/foods', {
+        name: form.name,
+        calories: parseFloat(form.calories),
+        protein_g: parseFloat(form.protein_g) || 0,
+        carbs_g: parseFloat(form.carbs_g) || 0,
+        fat_g: parseFloat(form.fat_g) || 0,
+        serving_size: parseFloat(form.serving_size) || 1,
+        serving_unit: form.serving_unit || 'serving',
+      });
+      // Log it
+      await client.post('/nutrition/logs', { food_id: food.id, servings: parseFloat(form.servings) || 1 });
+      setForm(EMPTY_FOOD);
+      setScanPreview(null);
+      setShowForm(false);
+      load();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to log food');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function deleteLog(id) {
+    await client.delete(`/nutrition/logs/${id}`).catch(() => {});
+    load();
+  }
+
+  const macroBar = (val, max, color) => (
+    <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
+      <div className={`h-full ${color} rounded-full`} style={{ width: `${Math.min(100, (val / max) * 100)}%` }} />
+    </div>
+  );
+
+  return (
+    <div className="md:ml-52 p-4 max-w-2xl mx-auto">
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-bold text-white">Nutrition</h2>
+        <div className="flex gap-2">
+          {/* Camera scan button */}
+          <label className="cursor-pointer bg-gray-800 hover:bg-gray-700 text-white px-3 py-2 rounded-xl text-sm flex items-center gap-2 transition-colors">
+            📷 Scan
+            <input
+              ref={cameraRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleScan}
+            />
+          </label>
+          <button
+            onClick={() => { setShowForm(f => !f); setScanPreview(null); }}
+            className="bg-blue-600 hover:bg-blue-500 text-white px-3 py-2 rounded-xl text-sm transition-colors"
+          >
+            + Log Food
+          </button>
+        </div>
+      </div>
+
+      {/* Daily summary */}
+      {summary && (
+        <div className="bg-gray-900 rounded-2xl border border-gray-800 p-4 mb-4">
+          <div className="flex justify-between items-center mb-3">
+            <p className="text-sm text-gray-400">Today's Macros</p>
+            <p className="text-lg font-bold text-white">{Math.round(summary.total_calories || 0)} kcal</p>
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            {[
+              { label: 'Protein', val: summary.total_protein_g, target: 180, color: 'bg-blue-500', unit: 'g' },
+              { label: 'Carbs', val: summary.total_carbs_g, target: 250, color: 'bg-yellow-500', unit: 'g' },
+              { label: 'Fat', val: summary.total_fat_g, target: 80, color: 'bg-orange-500', unit: 'g' },
+            ].map(m => (
+              <div key={m.label}>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-gray-400">{m.label}</span>
+                  <span className="text-white">{Math.round(m.val || 0)}{m.unit}</span>
+                </div>
+                {macroBar(m.val || 0, m.target, m.color)}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Scan preview + form */}
+      {scanning && (
+        <div className="bg-gray-900 rounded-2xl border border-gray-800 p-6 mb-4 text-center">
+          <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-2" />
+          <p className="text-gray-400 text-sm">Reading nutrition label…</p>
+        </div>
+      )}
+
+      {showForm && !scanning && (
+        <div className="bg-gray-900 rounded-2xl border border-gray-800 p-4 mb-4">
+          {scanPreview && (
+            <img src={scanPreview} alt="scan" className="w-full max-h-40 object-cover rounded-xl mb-4" />
+          )}
+          <form onSubmit={submitLog} className="space-y-3">
+            <div className="relative">
+              <input
+                placeholder="Food name"
+                value={form.name}
+                onChange={e => { setForm(f => ({ ...f, name: e.target.value })); searchFoods(e.target.value); }}
+                required
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500"
+              />
+              {suggestions.length > 0 && (
+                <ul className="absolute z-10 left-0 right-0 bg-gray-800 border border-gray-700 rounded-lg mt-1 overflow-hidden shadow-xl">
+                  {suggestions.map(f => (
+                    <li
+                      key={f.id}
+                      onClick={() => selectSuggestion(f)}
+                      className="px-3 py-2.5 text-sm text-gray-300 hover:bg-gray-700 cursor-pointer"
+                    >
+                      {f.name} — {f.calories} kcal/{f.serving_size}{f.serving_unit}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { label: 'Calories', key: 'calories' },
+                { label: 'Protein (g)', key: 'protein_g' },
+                { label: 'Carbs (g)', key: 'carbs_g' },
+                { label: 'Fat (g)', key: 'fat_g' },
+              ].map(f => (
+                <input
+                  key={f.key}
+                  type="number"
+                  step="0.1"
+                  placeholder={f.label}
+                  value={form[f.key]}
+                  onChange={e => setForm(x => ({ ...x, [f.key]: e.target.value }))}
+                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                />
+              ))}
+            </div>
+
+            <div className="flex gap-3">
+              <input
+                type="number"
+                step="0.1"
+                placeholder="Serving size"
+                value={form.serving_size}
+                onChange={e => setForm(f => ({ ...f, serving_size: e.target.value }))}
+                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500"
+              />
+              <input
+                placeholder="Unit (g, oz, cup…)"
+                value={form.serving_unit}
+                onChange={e => setForm(f => ({ ...f, serving_unit: e.target.value }))}
+                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500"
+              />
+              <input
+                type="number"
+                step="0.5"
+                placeholder="# servings"
+                value={form.servings}
+                onChange={e => setForm(f => ({ ...f, servings: e.target.value }))}
+                className="w-24 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
+            {error && <p className="text-red-400 text-sm">{error}</p>}
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => { setShowForm(false); setScanPreview(null); setForm(EMPTY_FOOD); }}
+                className="flex-1 bg-gray-800 text-gray-400 py-2.5 rounded-xl text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={submitting}
+                className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white py-2.5 rounded-xl text-sm font-medium"
+              >
+                {submitting ? 'Saving…' : 'Log Food'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Today's log */}
+      <div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-800">
+          <p className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Today's Log</p>
+        </div>
+        {logs.length === 0 ? (
+          <p className="text-gray-500 text-sm text-center py-8">Nothing logged yet today</p>
+        ) : (
+          <ul className="divide-y divide-gray-800">
+            {logs.map(log => {
+              const cal = Math.round(log.servings * log.calories);
+              const pro = Math.round(log.servings * log.protein_g);
+              return (
+                <li key={log.id} className="flex items-center justify-between px-4 py-3">
+                  <div>
+                    <p className="text-sm text-white">{log.name}</p>
+                    <p className="text-xs text-gray-500">{log.servings} × {log.serving_size}{log.serving_unit} · {pro}g protein</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-semibold text-white">{cal} kcal</span>
+                    <button
+                      onClick={() => deleteLog(log.id)}
+                      className="text-gray-600 hover:text-red-400 text-xs transition-colors"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
