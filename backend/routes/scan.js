@@ -55,11 +55,14 @@ Do not include any text outside the JSON object.`,
       ],
     });
 
-    const text = response.content[0].text.trim();
+    let text = response.content[0].text.trim();
+    // Strip markdown code fences Claude sometimes adds despite instructions
+    text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
     let parsed;
     try {
       parsed = JSON.parse(text);
     } catch {
+      console.error('[scan] JSON parse failed, raw text:', text.slice(0, 300));
       return res.status(422).json({ error: 'Could not parse nutrition from image' });
     }
 
