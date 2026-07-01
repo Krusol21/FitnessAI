@@ -11,7 +11,7 @@ function ProtectedRoute({ children }) {
   const token = localStorage.getItem('fitnessai_token');
   if (!token) return <Navigate to="/login" replace />;
   return (
-    <div className="flex flex-col min-h-dvh">
+    <div className="flex flex-col min-h-dvh" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
       <Navbar />
       <main className="flex-1 pb-24 md:pb-0" style={{ paddingBottom: 'calc(5rem + env(safe-area-inset-bottom))' }}>{children}</main>
     </div>
