@@ -93,10 +93,10 @@ router.post('/chat', async (req, res, next) => {
   }
 });
 
-router.get('/history', (req, res, next) => {
+router.get('/history', async (req, res, next) => {
   try {
     const db = getDb();
-    const history = db.prepare(
+    const history = await db.prepare(
       'SELECT role, content, created_at FROM conversations WHERE user_id = ? ORDER BY created_at ASC LIMIT 50'
     ).all([req.userId]);
     res.json(history);
