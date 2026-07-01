@@ -31,13 +31,13 @@ router.post('/chat', async (req, res, next) => {
     const userId = req.userId;
 
     // Save user message
-    db.prepare('INSERT INTO conversations (id, user_id, role, content) VALUES (?, ?, ?, ?)')
+    await db.prepare('INSERT INTO conversations (id, user_id, role, content) VALUES (?, ?, ?, ?)')
       .run([uuidv4(), userId, 'user', message]);
 
     // Load last 20 messages for context
-    const history = db.prepare(
+    const history = (await db.prepare(
       'SELECT role, content FROM conversations WHERE user_id = ? ORDER BY created_at DESC LIMIT 20'
-    ).all([userId]).reverse();
+    ).all([userId])).reverse();
 
     // Build messages array
     const messages = history.map(h => ({ role: h.role, content: h.content }));
@@ -84,7 +84,7 @@ router.post('/chat', async (req, res, next) => {
     const assistantText = response.content.find(b => b.type === 'text')?.text || '';
 
     // Save assistant response
-    db.prepare('INSERT INTO conversations (id, user_id, role, content) VALUES (?, ?, ?, ?)')
+    await db.prepare('INSERT INTO conversations (id, user_id, role, content) VALUES (?, ?, ?, ?)')
       .run([uuidv4(), userId, 'assistant', assistantText]);
 
     res.json({ message: assistantText });
