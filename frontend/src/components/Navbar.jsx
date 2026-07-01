@@ -145,7 +145,7 @@ export default function Navbar() {
       </nav>
 
       {/* Mobile bottom bar */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 flex justify-around z-50">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-800 flex justify-around z-50 safe-bottom">
         {links.map(l => (
           <NavLink
             key={l.to}
@@ -174,7 +174,7 @@ export default function Navbar() {
       {/* Mobile menu */}
       {showMenu && (
         <div className="md:hidden fixed inset-0 bg-black/60 z-40" onClick={() => setShowMenu(false)}>
-          <div className="absolute bottom-20 right-4 bg-gray-900 border border-gray-700 rounded-2xl overflow-hidden shadow-xl" onClick={e => e.stopPropagation()}>
+          <div className="absolute bottom-20 right-4 bg-gray-900 border border-gray-700 rounded-2xl overflow-hidden shadow-xl" style={{ bottom: 'calc(5rem + env(safe-area-inset-bottom))' }} onClick={e => e.stopPropagation()}>
             <button
               onClick={() => { setShowMenu(false); setShowChangePassword(true); }}
               className="block w-full text-left px-5 py-3.5 text-sm text-gray-300 hover:bg-gray-800"

@@ -13,7 +13,7 @@ function ProtectedRoute({ children }) {
   return (
     <div className="flex flex-col min-h-dvh">
       <Navbar />
-      <main className="flex-1 pb-20 md:pb-0">{children}</main>
+      <main className="flex-1 pb-24 md:pb-0" style={{ paddingBottom: 'calc(5rem + env(safe-area-inset-bottom))' }}>{children}</main>
     </div>
   );
 }
