@@ -228,15 +228,17 @@ export default function NutritionLog() {
                 { label: 'Carbs (g)', key: 'carbs_g' },
                 { label: 'Fat (g)', key: 'fat_g' },
               ].map(f => (
-                <input
-                  key={f.key}
-                  type="number"
-                  step="0.1"
-                  placeholder={f.label}
-                  value={form[f.key]}
-                  onChange={e => setForm(x => ({ ...x, [f.key]: e.target.value }))}
-                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500"
-                />
+                <div key={f.key} className="flex flex-col gap-1">
+                  <label className="text-xs text-gray-400">{f.label}</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    placeholder="0"
+                    value={form[f.key]}
+                    onChange={e => setForm(x => ({ ...x, [f.key]: e.target.value }))}
+                    className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                  />
+                </div>
               ))}
             </div>
 
