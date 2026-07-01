@@ -64,6 +64,7 @@ async function migrate() {
       protein_g REAL NOT NULL DEFAULT 0,
       carbs_g REAL NOT NULL DEFAULT 0,
       fat_g REAL NOT NULL DEFAULT 0,
+      sugar_g REAL NOT NULL DEFAULT 0,
       serving_size REAL NOT NULL DEFAULT 1,
       serving_unit TEXT NOT NULL DEFAULT 'serving',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -115,6 +116,8 @@ async function migrate() {
       content TEXT NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    ALTER TABLE foods ADD COLUMN IF NOT EXISTS sugar_g REAL NOT NULL DEFAULT 0;
 
     CREATE INDEX IF NOT EXISTS idx_weight_logs_user ON weight_logs(user_id, logged_at);
     CREATE INDEX IF NOT EXISTS idx_nutrition_logs_user ON nutrition_logs(user_id, logged_at);

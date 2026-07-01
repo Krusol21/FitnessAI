@@ -44,6 +44,7 @@ router.post('/', upload.single('image'), async (req, res, next) => {
   "protein_g": number,
   "carbs_g": number,
   "fat_g": number,
+  "sugar_g": number,
   "serving_size": number,
   "serving_unit": "string (e.g. g, oz, cup, piece)"
 }

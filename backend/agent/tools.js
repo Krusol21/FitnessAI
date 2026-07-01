@@ -48,6 +48,7 @@ const TOOL_DEFINITIONS = [
         protein_g: { type: 'number' },
         carbs_g: { type: 'number' },
         fat_g: { type: 'number' },
+        sugar_g: { type: 'number' },
         serving_size: { type: 'number' },
         serving_unit: { type: 'string' },
         servings: { type: 'number', description: 'Number of servings consumed (default 1)' },
@@ -183,13 +184,13 @@ async function executeTool(toolName, toolInput, userId) {
   if (toolName === 'log_food') {
     const foodId = uuidv4();
     await db.prepare(`
-      INSERT INTO foods (id, user_id, name, calories, protein_g, carbs_g, fat_g, serving_size, serving_unit)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO foods (id, user_id, name, calories, protein_g, carbs_g, fat_g, sugar_g, serving_size, serving_unit)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(user_id, name) DO UPDATE SET
         calories = EXCLUDED.calories, protein_g = EXCLUDED.protein_g,
-        carbs_g = EXCLUDED.carbs_g, fat_g = EXCLUDED.fat_g,
+        carbs_g = EXCLUDED.carbs_g, fat_g = EXCLUDED.fat_g, sugar_g = EXCLUDED.sugar_g,
         serving_size = EXCLUDED.serving_size, serving_unit = EXCLUDED.serving_unit
-    `).run([foodId, userId, toolInput.name, toolInput.calories, toolInput.protein_g || 0, toolInput.carbs_g || 0, toolInput.fat_g || 0, toolInput.serving_size || 1, toolInput.serving_unit || 'serving']);
+    `).run([foodId, userId, toolInput.name, toolInput.calories, toolInput.protein_g || 0, toolInput.carbs_g || 0, toolInput.fat_g || 0, toolInput.sugar_g || 0, toolInput.serving_size || 1, toolInput.serving_unit || 'serving']);
     const food = await db.prepare('SELECT id FROM foods WHERE user_id = ? AND name = ?').get([userId, toolInput.name]);
     const logId = uuidv4();
     await db.prepare('INSERT INTO nutrition_logs (id, user_id, food_id, servings, logged_at) VALUES (?, ?, ?, ?, ?)')

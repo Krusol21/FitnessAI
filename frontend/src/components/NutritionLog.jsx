@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import client from '../api/client';
 
-const EMPTY_FOOD = { name: '', calories: '', protein_g: '', carbs_g: '', fat_g: '', serving_size: '1', serving_unit: 'serving', servings: '1' };
+const EMPTY_FOOD = { name: '', calories: '', protein_g: '', carbs_g: '', fat_g: '', sugar_g: '', serving_size: '1', serving_unit: 'serving', servings: '1' };
 
 export default function NutritionLog() {
   const [logs, setLogs] = useState([]);
@@ -81,6 +81,7 @@ export default function NutritionLog() {
         protein_g: data.protein_g ?? '',
         carbs_g: data.carbs_g ?? '',
         fat_g: data.fat_g ?? '',
+        sugar_g: data.sugar_g ?? '',
         serving_size: data.serving_size ?? '1',
         serving_unit: data.serving_unit || 'serving',
         servings: '1',
@@ -106,6 +107,7 @@ export default function NutritionLog() {
         protein_g: parseFloat(form.protein_g) || 0,
         carbs_g: parseFloat(form.carbs_g) || 0,
         fat_g: parseFloat(form.fat_g) || 0,
+        sugar_g: parseFloat(form.sugar_g) || 0,
         serving_size: parseFloat(form.serving_size) || 1,
         serving_unit: form.serving_unit || 'serving',
       });
@@ -166,11 +168,12 @@ export default function NutritionLog() {
             <p className="text-sm text-gray-400">Today's Macros</p>
             <p className="text-lg font-bold text-white">{Math.round(summary.total_calories || 0)} kcal</p>
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-4 gap-3">
             {[
               { label: 'Protein', val: summary.total_protein_g, target: 180, color: 'bg-blue-500', unit: 'g' },
               { label: 'Carbs', val: summary.total_carbs_g, target: 250, color: 'bg-yellow-500', unit: 'g' },
               { label: 'Fat', val: summary.total_fat_g, target: 80, color: 'bg-orange-500', unit: 'g' },
+              { label: 'Sugar', val: summary.total_sugar_g, target: 50, color: 'bg-red-500', unit: 'g' },
             ].map(m => (
               <div key={m.label}>
                 <div className="flex justify-between text-xs mb-1">
@@ -227,6 +230,7 @@ export default function NutritionLog() {
                 { label: 'Protein (g)', key: 'protein_g' },
                 { label: 'Carbs (g)', key: 'carbs_g' },
                 { label: 'Fat (g)', key: 'fat_g' },
+                { label: 'Sugar (g)', key: 'sugar_g' },
               ].map(f => (
                 <div key={f.key} className="flex flex-col gap-1">
                   <label className="text-xs text-gray-400">{f.label}</label>

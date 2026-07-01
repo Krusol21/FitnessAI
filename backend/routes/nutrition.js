@@ -26,23 +26,24 @@ router.get('/foods', async (req, res, next) => {
 
 router.post('/foods', async (req, res, next) => {
   try {
-    const { name, calories, protein_g, carbs_g, fat_g, serving_size, serving_unit } = req.body;
+    const { name, calories, protein_g, carbs_g, fat_g, sugar_g, serving_size, serving_unit } = req.body;
     if (!name || calories === undefined) return res.status(400).json({ error: 'name and calories required' });
     const db = getDb();
     const id = uuidv4();
     await db.prepare(`
-      INSERT INTO foods (id, user_id, name, calories, protein_g, carbs_g, fat_g, serving_size, serving_unit)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO foods (id, user_id, name, calories, protein_g, carbs_g, fat_g, sugar_g, serving_size, serving_unit)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(user_id, name) DO UPDATE SET
         calories = EXCLUDED.calories,
         protein_g = EXCLUDED.protein_g,
         carbs_g = EXCLUDED.carbs_g,
         fat_g = EXCLUDED.fat_g,
+        sugar_g = EXCLUDED.sugar_g,
         serving_size = EXCLUDED.serving_size,
         serving_unit = EXCLUDED.serving_unit
     `).run([
       id, req.userId, name, calories,
-      protein_g || 0, carbs_g || 0, fat_g || 0,
+      protein_g || 0, carbs_g || 0, fat_g || 0, sugar_g || 0,
       serving_size || 1, serving_unit || 'serving'
     ]);
     const food = await db.prepare('SELECT * FROM foods WHERE user_id = ? AND name = ?').get([req.userId, name]);
@@ -117,7 +118,8 @@ router.get('/summary', async (req, res, next) => {
         ROUND(SUM(nl.servings * f.calories)::numeric, 1) as total_calories,
         ROUND(SUM(nl.servings * f.protein_g)::numeric, 1) as total_protein_g,
         ROUND(SUM(nl.servings * f.carbs_g)::numeric, 1) as total_carbs_g,
-        ROUND(SUM(nl.servings * f.fat_g)::numeric, 1) as total_fat_g
+        ROUND(SUM(nl.servings * f.fat_g)::numeric, 1) as total_fat_g,
+        ROUND(SUM(nl.servings * f.sugar_g)::numeric, 1) as total_sugar_g
       FROM nutrition_logs nl
       JOIN foods f ON f.id = nl.food_id
       WHERE nl.user_id = ? AND nl.logged_at::date = ?::date
