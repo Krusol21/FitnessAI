@@ -13,16 +13,12 @@ const DAY_KEYS = ['squat_day', 'bench_day', 'deadlift_day'];
 const DAY_LABELS = { squat_day: 'Squat Day', bench_day: 'Bench Day', deadlift_day: 'Deadlift Day' };
 const DAY_TYPES = { squat_day: 'squat', bench_day: 'bench', deadlift_day: 'deadlift' };
 
-// Normalize plan_json no matter what keys Claude used
 function normalizePlan(raw) {
   if (!raw) return raw;
   const json = raw.plan_json;
   if (!json) return raw;
-
-  // Already correct structure
   if (json.squat_day) return raw;
 
-  // Try to find day data under alternate key names
   function findDay(candidates) {
     for (const key of candidates) {
       if (json[key]) return json[key];
@@ -31,12 +27,10 @@ function normalizePlan(raw) {
   }
 
   function normalizeDay(day) {
-    if (!day) return { main_lift: null, accessories: [] };
-    // main_lift might be a string instead of object
+    if (!day) return { pre_workout: null, main_lift: null, accessories: [] };
     const ml = typeof day.main_lift === 'string'
       ? { name: day.main_lift, sets: null, reps: null }
       : day.main_lift || null;
-    // accessories might be strings
     const acc = (day.accessories || []).map(a =>
       typeof a === 'string' ? { name: a, sets: null, reps: null } : a
     );
@@ -55,7 +49,7 @@ function normalizePlan(raw) {
 }
 
 export default function WorkoutPlan() {
-  const [plan, setPlan] = useState(undefined); // undefined = loading, null = no plan
+  const [plan, setPlan] = useState(undefined);
   const [activeDay, setActiveDay] = useState('squat_day');
   const [checked, setChecked] = useState({});
   const [logging, setLogging] = useState(false);
@@ -65,14 +59,8 @@ export default function WorkoutPlan() {
 
   function load() {
     client.get('/workouts/plan')
-      .then(r => {
-        setRawApiResponse(r.data);
-        setPlan(normalizePlan(r.data));
-      })
-      .catch(err => {
-        setRawApiResponse({ error: err.message });
-        setPlan(null);
-      });
+      .then(r => { setRawApiResponse(r.data); setPlan(normalizePlan(r.data)); })
+      .catch(err => { setRawApiResponse({ error: err.message }); setPlan(null); });
   }
 
   useEffect(() => { load(); }, []);
@@ -122,15 +110,10 @@ export default function WorkoutPlan() {
       <div className="md:ml-52 p-4 max-w-2xl mx-auto text-center mt-12">
         <p className="text-gray-400 text-lg mb-4">No active workout plan</p>
         <div className="flex flex-col items-center gap-3">
-          <button
-            onClick={() => navigate('/chat')}
-            className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-xl font-medium"
-          >
+          <button onClick={() => navigate('/chat')} className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-xl font-medium">
             Ask Coach AI to build one
           </button>
-          <button onClick={load} className="text-sm text-gray-500 hover:text-gray-300">
-            Refresh
-          </button>
+          <button onClick={load} className="text-sm text-gray-500 hover:text-gray-300">↻ Refresh</button>
           {rawApiResponse && (
             <pre className="mt-4 bg-gray-900 border border-gray-700 rounded-xl p-3 text-xs text-gray-400 overflow-auto max-h-48 text-left w-full max-w-sm">
               {JSON.stringify(rawApiResponse, null, 2)}
@@ -149,6 +132,7 @@ export default function WorkoutPlan() {
 
   return (
     <div className="md:ml-52 p-4 max-w-2xl mx-auto">
+      {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div>
           <h2 className="text-2xl font-bold text-white">{plan.name}</h2>
@@ -161,10 +145,7 @@ export default function WorkoutPlan() {
         </div>
         <div className="flex gap-2">
           <button onClick={load} className="text-xs text-gray-600 hover:text-gray-400">↻</button>
-          <button
-            onClick={() => setShowRaw(r => !r)}
-            className="text-xs text-gray-600 hover:text-gray-400"
-          >
+          <button onClick={() => setShowRaw(r => !r)} className="text-xs text-gray-600 hover:text-gray-400">
             {showRaw ? 'Hide' : 'Debug'}
           </button>
         </div>
@@ -174,6 +155,13 @@ export default function WorkoutPlan() {
         <pre className="bg-gray-900 border border-gray-700 rounded-xl p-3 text-xs text-gray-400 overflow-auto mb-4 max-h-64">
           {JSON.stringify(rawApiResponse, null, 2)}
         </pre>
+      )}
+
+      {/* Plan notes */}
+      {plan.plan_json?.notes && (
+        <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 mb-4 text-sm text-blue-300">
+          {plan.plan_json.notes}
+        </div>
       )}
 
       {isOff ? (
@@ -188,7 +176,7 @@ export default function WorkoutPlan() {
             <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 mb-4">
               <p className="text-yellow-400 text-sm font-medium">Deload Week</p>
               <p className="text-yellow-300/70 text-xs mt-0.5">
-                Main lifts at 70% of your PR. Reduce accessory volume. Focus on form.
+                Main lifts at 55–65% of recent working weight. No set above RPE 6. Feel itchy to train by Thursday — that means it's working.
               </p>
             </div>
           )}
@@ -208,32 +196,98 @@ export default function WorkoutPlan() {
             ))}
           </div>
 
+          {/* Pre-workout activation */}
+          {dayData.pre_workout && (
+            <div className="bg-gray-900 rounded-2xl border border-gray-800 p-4 mb-3">
+              <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">⚡ Pre-Workout Activation</p>
+              <p className="text-sm text-gray-300 leading-relaxed">{dayData.pre_workout}</p>
+            </div>
+          )}
+
           {/* Main lift */}
           {mainLift && (
             <div className="bg-gray-900 rounded-2xl border border-gray-800 p-4 mb-3">
-              <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Main Lift</p>
-              <ExerciseRow
-                exercise={mainLift}
-                checked={checked}
-                toggle={toggle}
-                isDeload={isDeload}
-              />
+              <p className="text-xs text-gray-500 uppercase tracking-wider mb-3">Main Lift</p>
+
+              {/* Warm-up progression */}
+              {mainLift.warmup?.length > 0 && (
+                <div className="mb-4 pb-4 border-b border-gray-800">
+                  <p className="text-xs text-gray-600 mb-2">Warm-up</p>
+                  <div className="flex flex-wrap gap-2">
+                    {mainLift.warmup.map((w, i) => (
+                      <div key={i} className="bg-gray-800 rounded-lg px-2.5 py-1.5 text-center">
+                        <p className="text-xs text-gray-400">{w.label}</p>
+                        <p className="text-xs text-gray-500">× {w.reps}</p>
+                      </div>
+                    ))}
+                    <div className="bg-blue-900/30 border border-blue-700/30 rounded-lg px-2.5 py-1.5 text-center">
+                      <p className="text-xs text-blue-400">Working</p>
+                      <p className="text-xs text-blue-500">sets ↓</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Working set details */}
+              <label className="flex items-start gap-3 cursor-pointer group">
+                <div className={`mt-0.5 w-5 h-5 rounded-md border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
+                  checked[mainLift.name] ? 'bg-blue-600 border-blue-600' : 'border-gray-600 group-hover:border-gray-400'
+                }`}>
+                  {checked[mainLift.name] && <span className="text-white text-xs">✓</span>}
+                </div>
+                <input type="checkbox" className="hidden" checked={!!checked[mainLift.name]} onChange={() => toggle(mainLift.name)} />
+                <div className="flex-1">
+                  <p className={`text-base font-semibold ${checked[mainLift.name] ? 'line-through text-gray-500' : 'text-white'}`}>
+                    {mainLift.name}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                    {mainLift.sets && mainLift.reps && (
+                      <span className="bg-gray-800 text-gray-300 text-xs px-2 py-1 rounded-lg">
+                        {mainLift.sets} × {mainLift.reps} reps
+                      </span>
+                    )}
+                    {mainLift.rpe && (
+                      <span className="bg-orange-500/20 text-orange-400 text-xs px-2 py-1 rounded-lg border border-orange-500/30">
+                        RPE {mainLift.rpe}
+                      </span>
+                    )}
+                    {mainLift.intensity_pct && (
+                      <span className="bg-purple-500/20 text-purple-400 text-xs px-2 py-1 rounded-lg border border-purple-500/30">
+                        ~{mainLift.intensity_pct}%
+                      </span>
+                    )}
+                    {mainLift.rest_minutes && (
+                      <span className="text-gray-600 text-xs">
+                        ⏱ {mainLift.rest_minutes} min rest
+                      </span>
+                    )}
+                    {isDeload && (
+                      <span className="bg-yellow-500/20 text-yellow-400 text-xs px-2 py-1 rounded-lg">
+                        55–65% working weight
+                      </span>
+                    )}
+                  </div>
+                  {mainLift.notes && (
+                    <p className="text-xs text-gray-500 mt-2 leading-relaxed italic">{mainLift.notes}</p>
+                  )}
+                </div>
+              </label>
             </div>
           )}
 
           {/* Accessories */}
           {accessories.length > 0 && (
             <div className="bg-gray-900 rounded-2xl border border-gray-800 p-4 mb-4">
-              <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Accessories</p>
-              <div className="space-y-3">
+              <p className="text-xs text-gray-500 uppercase tracking-wider mb-3">Accessories</p>
+              <div className="space-y-4">
                 {accessories.map((ex, i) => (
-                  <ExerciseRow key={i} exercise={ex} checked={checked} toggle={toggle} />
+                  <AccessoryRow key={i} exercise={ex} checked={checked} toggle={toggle} />
                 ))}
               </div>
             </div>
           )}
 
-          {/* Notes */}
+          {/* Day notes */}
           {dayData.notes && (
             <div className="bg-gray-800/50 rounded-xl p-3 mb-4 text-sm text-gray-400">
               {dayData.notes}
@@ -253,11 +307,12 @@ export default function WorkoutPlan() {
   );
 }
 
-function ExerciseRow({ exercise, checked, toggle, isDeload }) {
+function AccessoryRow({ exercise, checked, toggle }) {
   const name = typeof exercise === 'string' ? exercise : exercise.name;
   const sets = typeof exercise === 'object' ? exercise.sets : null;
   const reps = typeof exercise === 'object' ? exercise.reps : null;
   const notes = typeof exercise === 'object' ? exercise.notes : null;
+  const rest = typeof exercise === 'object' ? exercise.rest_minutes : null;
   const done = !!checked[name];
 
   return (
@@ -270,13 +325,17 @@ function ExerciseRow({ exercise, checked, toggle, isDeload }) {
       <input type="checkbox" className="hidden" checked={done} onChange={() => toggle(name)} />
       <div className="flex-1">
         <p className={`text-sm font-medium ${done ? 'line-through text-gray-500' : 'text-white'}`}>{name}</p>
-        {(sets || reps) && (
-          <p className="text-xs text-gray-500 mt-0.5">
-            {sets ? `${sets} sets` : ''}{sets && reps ? ' × ' : ''}{reps ? `${reps} reps` : ''}
-            {isDeload ? ' (at 70% PR)' : ''}
-          </p>
-        )}
-        {notes && <p className="text-xs text-gray-600 mt-0.5 italic">{notes}</p>}
+        <div className="flex flex-wrap items-center gap-2 mt-1">
+          {(sets || reps) && (
+            <span className="text-xs text-gray-500">
+              {sets && `${sets} sets`}{sets && reps && ' × '}{reps && `${reps} reps`}
+            </span>
+          )}
+          {rest && (
+            <span className="text-xs text-gray-600">⏱ {rest} min rest</span>
+          )}
+        </div>
+        {notes && <p className="text-xs text-gray-600 mt-1 leading-relaxed">{notes}</p>}
       </div>
     </label>
   );

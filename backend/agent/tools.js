@@ -89,35 +89,63 @@ const TOOL_DEFINITIONS = [
         name: { type: 'string' },
         plan_json: {
           type: 'object',
-          description: 'Must use exactly these keys: squat_day, bench_day, deadlift_day.',
+          description: 'Must use exactly these keys: squat_day, bench_day, deadlift_day. Every day must include pre_workout activation, a fully detailed main_lift with warmup sets, RPE, rest time, and 4-5 accessories with rest times.',
           properties: {
-            squat_day: {
-              type: 'object',
-              properties: {
-                main_lift: { type: 'object', properties: { name: { type: 'string' }, sets: { type: 'integer' }, reps: { type: 'string' }, notes: { type: 'string' } }, required: ['name', 'sets', 'reps'] },
-                accessories: { type: 'array', items: { type: 'object', properties: { name: { type: 'string' }, sets: { type: 'integer' }, reps: { type: 'string' }, notes: { type: 'string' } }, required: ['name', 'sets', 'reps'] } },
-              },
-              required: ['main_lift', 'accessories'],
-            },
-            bench_day: {
-              type: 'object',
-              properties: {
-                main_lift: { type: 'object', properties: { name: { type: 'string' }, sets: { type: 'integer' }, reps: { type: 'string' }, notes: { type: 'string' } }, required: ['name', 'sets', 'reps'] },
-                accessories: { type: 'array', items: { type: 'object', properties: { name: { type: 'string' }, sets: { type: 'integer' }, reps: { type: 'string' }, notes: { type: 'string' } }, required: ['name', 'sets', 'reps'] } },
-              },
-              required: ['main_lift', 'accessories'],
-            },
-            deadlift_day: {
-              type: 'object',
-              properties: {
-                main_lift: { type: 'object', properties: { name: { type: 'string' }, sets: { type: 'integer' }, reps: { type: 'string' }, notes: { type: 'string' } }, required: ['name', 'sets', 'reps'] },
-                accessories: { type: 'array', items: { type: 'object', properties: { name: { type: 'string' }, sets: { type: 'integer' }, reps: { type: 'string' }, notes: { type: 'string' } }, required: ['name', 'sets', 'reps'] } },
-              },
-              required: ['main_lift', 'accessories'],
-            },
-            notes: { type: 'string' },
+            squat_day: { $ref: '#/definitions/training_day' },
+            bench_day: { $ref: '#/definitions/training_day' },
+            deadlift_day: { $ref: '#/definitions/training_day' },
+            notes: { type: 'string', description: 'Overall plan notes, periodization context, progression instructions' },
           },
           required: ['squat_day', 'bench_day', 'deadlift_day'],
+          definitions: {
+            training_day: {
+              type: 'object',
+              properties: {
+                pre_workout: { type: 'string', description: '5-10 min activation routine: specific mobility drills and activation exercises for this day (e.g. "5 min easy bike, hip flexor stretch 30s/side, goblet squat x10, glute bridge x15")' },
+                main_lift: {
+                  type: 'object',
+                  properties: {
+                    name: { type: 'string' },
+                    sets: { type: 'integer' },
+                    reps: { type: 'string', description: 'e.g. "4", "3-5", "1" — use the exact rep target' },
+                    rpe: { type: 'number', description: 'Target RPE 6-10. RPE 7 = 3 reps in reserve, RPE 8 = 2 RIR, RPE 9 = 1 RIR' },
+                    intensity_pct: { type: 'number', description: 'Approx % of 1RM (e.g. 80). Used alongside RPE for context.' },
+                    rest_minutes: { type: 'number', description: 'Rest between working sets in minutes. Main lifts: 3-5 min.' },
+                    warmup: {
+                      type: 'array',
+                      description: 'Warm-up set pyramid before working sets. Always include: bar x10, ~40% x5, ~55% x3, ~70% x2, then optionally ~80% x1 before heavy sets.',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          label: { type: 'string', description: 'e.g. "Bar", "40% 1RM", "55% 1RM", "70% 1RM"' },
+                          reps: { type: 'integer' },
+                        },
+                        required: ['label', 'reps'],
+                      },
+                    },
+                    notes: { type: 'string', description: 'Key technique cues and coaching notes for this lift' },
+                  },
+                  required: ['name', 'sets', 'reps', 'rpe', 'rest_minutes', 'warmup'],
+                },
+                accessories: {
+                  type: 'array',
+                  description: '4-5 accessories per day. Include rest_minutes on each. Notes should explain WHY this exercise is chosen (what weakness it addresses).',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      name: { type: 'string' },
+                      sets: { type: 'integer' },
+                      reps: { type: 'string' },
+                      rest_minutes: { type: 'number', description: 'Accessories: 60s-2min depending on load' },
+                      notes: { type: 'string', description: 'Why this exercise, load/intensity guidance (e.g. "RPE 7", "moderate weight"), technique cue' },
+                    },
+                    required: ['name', 'sets', 'reps', 'rest_minutes'],
+                  },
+                },
+              },
+              required: ['pre_workout', 'main_lift', 'accessories'],
+            },
+          },
         },
         cycle_start_date: { type: 'string', description: 'YYYY-MM-DD (defaults to today)' },
       },
