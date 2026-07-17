@@ -15,11 +15,19 @@ export default function NutritionLog() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const cameraRef = useRef(null);
-  const today = new Date().toISOString().split('T')[0];
+  // Compute local-time day boundaries as UTC ISO strings so the backend
+  // filters by the user's actual calendar day, not the UTC date.
+  function getTodayBounds() {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    return { start: start.toISOString(), end: end.toISOString() };
+  }
 
   function load() {
-    client.get(`/nutrition/logs?date=${today}`).then(r => setLogs(r.data)).catch(() => {});
-    client.get(`/nutrition/summary?date=${today}`).then(r => setSummary(r.data)).catch(() => {});
+    const { start, end } = getTodayBounds();
+    client.get(`/nutrition/logs?start=${start}&end=${end}`).then(r => setLogs(r.data)).catch(() => {});
+    client.get(`/nutrition/summary?start=${start}&end=${end}`).then(r => setSummary(r.data)).catch(() => {});
   }
 
   useEffect(() => { load(); }, []);

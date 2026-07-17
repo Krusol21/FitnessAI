@@ -28,7 +28,11 @@ export default function ChatInterface() {
     setMessages(m => [...m, { role: 'user', content: text }]);
     setLoading(true);
     try {
-      const { data } = await client.post('/agent/chat', { message: text });
+      const now = new Date();
+      const localDate = now.toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
+      const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+      const dayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString();
+      const { data } = await client.post('/agent/chat', { message: text, localDate, dayStart, dayEnd });
       setMessages(m => [...m, { role: 'assistant', content: data.message }]);
     } catch (err) {
       setMessages(m => [...m, { role: 'assistant', content: '⚠️ Something went wrong. Try again.' }]);

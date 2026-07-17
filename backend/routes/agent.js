@@ -10,7 +10,7 @@ router.use(authenticate);
 
 const client = new Anthropic();
 
-const SYSTEM_PROMPT = `You are Coach AI — a seasoned strength and conditioning coach with deep knowledge of exercise science, powerlifting programming, and sports nutrition. You've worked with lifters at all levels and you communicate the way a great coach does: conversational, confident, and genuinely engaged. You don't rattle off bullet points — you talk like a person who knows their stuff and actually cares about the athlete in front of them.
+const BASE_SYSTEM_PROMPT = `You are Coach AI — a seasoned strength and conditioning coach with deep knowledge of exercise science, powerlifting programming, and sports nutrition. You've worked with lifters at all levels and you communicate the way a great coach does: conversational, confident, and genuinely engaged. You don't rattle off bullet points — you talk like a person who knows their stuff and actually cares about the athlete in front of them.
 
 Your client runs a powerlifting-style 3-day split: Squat Day (Back Squat as the main lift, ab accessories), Bench Day (Bench Press main, triceps accessories), and Deadlift Day (Deadlift main, biceps accessories). Their training cycle runs 14 weeks — six weeks of progressive overload, a deload week at week 7 where all main lifts drop to 70% of PR with reduced accessory volume, another six-week build block, then a full rest week at week 14 before the cycle repeats.
 
@@ -24,23 +24,29 @@ CRITICAL — tool calls: Whenever you build or update a workout plan, you MUST c
 
 router.post('/chat', async (req, res, next) => {
   try {
-    const { message } = req.body;
+    const { message, localDate, dayStart, dayEnd } = req.body;
     if (!message?.trim()) return res.status(400).json({ error: 'Message required' });
 
     const db = getDb();
     const userId = req.userId;
 
+    // Inject the user's local date so the coach always knows what day it is
+    const dateLine = localDate ? `\n\nToday's date (user's local time): ${localDate}.` : '';
+    const SYSTEM_PROMPT = BASE_SYSTEM_PROMPT + dateLine;
+
     // Save user message
     await db.prepare('INSERT INTO conversations (id, user_id, role, content) VALUES (?, ?, ?, ?)')
       .run([uuidv4(), userId, 'user', message]);
 
-    // Load last 20 messages for context
+    // Load last 40 messages for context
     const history = (await db.prepare(
-      'SELECT role, content FROM conversations WHERE user_id = ? ORDER BY created_at DESC LIMIT 20'
+      'SELECT role, content FROM conversations WHERE user_id = ? ORDER BY created_at DESC LIMIT 40'
     ).all([userId])).reverse();
 
     // Build messages array
     const messages = history.map(h => ({ role: h.role, content: h.content }));
+
+    const dateContext = { localDate, dayStart, dayEnd };
 
     // Agentic tool-use loop
     let response = await client.messages.create({
@@ -59,7 +65,7 @@ router.post('/chat', async (req, res, next) => {
       console.log('[agent] tools called:', toolUseBlocks.map(b => b.name).join(', '));
 
       for (const block of toolUseBlocks) {
-        const result = await executeTool(block.name, block.input, userId);
+        const result = await executeTool(block.name, block.input, userId, dateContext);
         toolResults.push({
           type: 'tool_result',
           tool_use_id: block.id,
@@ -97,7 +103,7 @@ router.get('/history', async (req, res, next) => {
   try {
     const db = getDb();
     const history = await db.prepare(
-      'SELECT role, content, created_at FROM conversations WHERE user_id = ? ORDER BY created_at ASC LIMIT 50'
+      'SELECT role, content, created_at FROM conversations WHERE user_id = ? ORDER BY created_at ASC LIMIT 200'
     ).all([req.userId]);
     res.json(history);
   } catch (err) { next(err); }

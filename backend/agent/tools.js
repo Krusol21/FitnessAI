@@ -141,7 +141,7 @@ const TOOL_DEFINITIONS = [
   },
 ];
 
-async function executeTool(toolName, toolInput, userId) {
+async function executeTool(toolName, toolInput, userId, dateContext = {}) {
   const db = getDb();
 
   if (toolName === 'get_user_profile') {
@@ -204,22 +204,36 @@ async function executeTool(toolName, toolInput, userId) {
   }
 
   if (toolName === 'get_nutrition_summary') {
-    const date = toolInput.date || new Date().toISOString().split('T')[0];
+    // If the coach passes an explicit date, compute UTC bounds for that local date;
+    // otherwise use the day bounds passed from the user's browser (correct local time).
+    let start, end;
+    if (toolInput.date) {
+      // Treat as local midnight UTC (best we can do without knowing the tz offset here)
+      start = new Date(toolInput.date + 'T00:00:00').toISOString();
+      end = new Date(toolInput.date + 'T00:00:00');
+      end.setDate(end.getDate() + 1);
+      end = end.toISOString();
+    } else {
+      start = dateContext.dayStart || new Date(new Date().setHours(0,0,0,0)).toISOString();
+      end = dateContext.dayEnd || new Date(new Date().setHours(24,0,0,0)).toISOString();
+    }
     const totals = await db.prepare(`
       SELECT COUNT(*) as entries,
         ROUND(SUM(nl.servings * f.calories)::numeric, 1) as total_calories,
         ROUND(SUM(nl.servings * f.protein_g)::numeric, 1) as total_protein_g,
         ROUND(SUM(nl.servings * f.carbs_g)::numeric, 1) as total_carbs_g,
-        ROUND(SUM(nl.servings * f.fat_g)::numeric, 1) as total_fat_g
+        ROUND(SUM(nl.servings * f.fat_g)::numeric, 1) as total_fat_g,
+        ROUND(SUM(nl.servings * f.sugar_g)::numeric, 1) as total_sugar_g
       FROM nutrition_logs nl JOIN foods f ON f.id = nl.food_id
-      WHERE nl.user_id = ? AND nl.logged_at::date = ?::date
-    `).get([userId, date]);
+      WHERE nl.user_id = ? AND nl.logged_at >= ?::timestamptz AND nl.logged_at < ?::timestamptz
+    `).get([userId, start, end]);
     const items = await db.prepare(`
-      SELECT f.name, nl.servings, f.calories, f.protein_g, f.carbs_g, f.fat_g
+      SELECT f.name, nl.servings, f.calories, f.protein_g, f.carbs_g, f.fat_g, f.sugar_g
       FROM nutrition_logs nl JOIN foods f ON f.id = nl.food_id
-      WHERE nl.user_id = ? AND nl.logged_at::date = ?::date ORDER BY nl.logged_at ASC
-    `).all([userId, date]);
-    return JSON.stringify({ date, ...totals, items });
+      WHERE nl.user_id = ? AND nl.logged_at >= ?::timestamptz AND nl.logged_at < ?::timestamptz
+      ORDER BY nl.logged_at ASC
+    `).all([userId, start, end]);
+    return JSON.stringify({ date: toolInput.date || dateContext.localDate, ...totals, items });
   }
 
   if (toolName === 'get_workout_plan') {

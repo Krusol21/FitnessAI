@@ -61,20 +61,20 @@ router.delete('/foods/:id', async (req, res, next) => {
 
 router.get('/logs', async (req, res, next) => {
   try {
-    const { date } = req.query;
+    const { start, end } = req.query;
     const db = getDb();
     let logs;
-    if (date) {
+    if (start && end) {
       logs = await db.prepare(`
-        SELECT nl.*, f.name, f.calories, f.protein_g, f.carbs_g, f.fat_g, f.serving_size, f.serving_unit
+        SELECT nl.*, f.name, f.calories, f.protein_g, f.carbs_g, f.fat_g, f.sugar_g, f.serving_size, f.serving_unit
         FROM nutrition_logs nl
         JOIN foods f ON f.id = nl.food_id
-        WHERE nl.user_id = ? AND nl.logged_at::date = ?::date
+        WHERE nl.user_id = ? AND nl.logged_at >= ?::timestamptz AND nl.logged_at < ?::timestamptz
         ORDER BY nl.logged_at ASC
-      `).all([req.userId, date]);
+      `).all([req.userId, start, end]);
     } else {
       logs = await db.prepare(`
-        SELECT nl.*, f.name, f.calories, f.protein_g, f.carbs_g, f.fat_g, f.serving_size, f.serving_unit
+        SELECT nl.*, f.name, f.calories, f.protein_g, f.carbs_g, f.fat_g, f.sugar_g, f.serving_size, f.serving_unit
         FROM nutrition_logs nl
         JOIN foods f ON f.id = nl.food_id
         WHERE nl.user_id = ?
@@ -109,9 +109,9 @@ router.delete('/logs/:id', async (req, res, next) => {
 
 router.get('/summary', async (req, res, next) => {
   try {
-    const { date } = req.query;
-    const target = date || new Date().toISOString().split('T')[0];
+    const { start, end } = req.query;
     const db = getDb();
+    // start/end are UTC ISO strings representing local-day boundaries sent from the frontend
     const totals = await db.prepare(`
       SELECT
         COUNT(*) as entries,
@@ -122,9 +122,9 @@ router.get('/summary', async (req, res, next) => {
         ROUND(SUM(nl.servings * f.sugar_g)::numeric, 1) as total_sugar_g
       FROM nutrition_logs nl
       JOIN foods f ON f.id = nl.food_id
-      WHERE nl.user_id = ? AND nl.logged_at::date = ?::date
-    `).get([req.userId, target]);
-    res.json({ date: target, ...totals });
+      WHERE nl.user_id = ? AND nl.logged_at >= ?::timestamptz AND nl.logged_at < ?::timestamptz
+    `).get([req.userId, start || new Date(new Date().setHours(0,0,0,0)).toISOString(), end || new Date(new Date().setHours(24,0,0,0)).toISOString()]);
+    res.json({ ...totals });
   } catch (err) { next(err); }
 });
 
