@@ -20,6 +20,7 @@ app.use('/api/nutrition', require('./routes/nutrition'));
 app.use('/api/workouts', require('./routes/workouts'));
 app.use('/api/scan', require('./routes/scan'));
 app.use('/api/agent', require('./routes/agent'));
+app.use('/api/notifications', require('./routes/notifications'));
 
 app.use((err, req, res, _next) => {
   console.error('[error]', err.message);

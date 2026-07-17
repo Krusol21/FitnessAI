@@ -6,9 +6,11 @@ import NutritionLog from './components/NutritionLog';
 import WorkoutPlan from './components/WorkoutPlan';
 import FoodLibrary from './components/FoodLibrary';
 import Navbar from './components/Navbar';
+import usePushNotifications from './hooks/usePushNotifications';
 
 function ProtectedRoute({ children }) {
   const token = localStorage.getItem('fitnessai_token');
+  usePushNotifications();
   if (!token) return <Navigate to="/login" replace />;
   return (
     <div className="flex flex-col min-h-dvh" style={{ paddingTop: 'env(safe-area-inset-top)' }}>

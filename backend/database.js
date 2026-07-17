@@ -119,6 +119,14 @@ async function migrate() {
 
     ALTER TABLE foods ADD COLUMN IF NOT EXISTS sugar_g REAL NOT NULL DEFAULT 0;
 
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      subscription_json TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(user_id)
+    );
+
     CREATE INDEX IF NOT EXISTS idx_weight_logs_user ON weight_logs(user_id, logged_at);
     CREATE INDEX IF NOT EXISTS idx_nutrition_logs_user ON nutrition_logs(user_id, logged_at);
     CREATE INDEX IF NOT EXISTS idx_pr_logs_user ON pr_logs(user_id, exercise_name);
