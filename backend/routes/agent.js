@@ -103,9 +103,9 @@ router.get('/history', async (req, res, next) => {
   try {
     const db = getDb();
     const history = await db.prepare(
-      'SELECT role, content, created_at FROM conversations WHERE user_id = ? ORDER BY created_at ASC LIMIT 200'
+      'SELECT role, content, created_at FROM conversations WHERE user_id = ? ORDER BY created_at DESC LIMIT 200'
     ).all([req.userId]);
-    res.json(history);
+    res.json(history.reverse());
   } catch (err) { next(err); }
 });
 
