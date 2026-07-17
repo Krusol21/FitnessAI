@@ -6,11 +6,15 @@ const { authenticate } = require('./middleware');
 
 const router = express.Router();
 
-webpush.setVapidDetails(
-  process.env.VAPID_EMAIL,
-  process.env.VAPID_PUBLIC_KEY,
-  process.env.VAPID_PRIVATE_KEY
-);
+function initVapid() {
+  if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+    webpush.setVapidDetails(
+      process.env.VAPID_EMAIL,
+      process.env.VAPID_PUBLIC_KEY,
+      process.env.VAPID_PRIVATE_KEY
+    );
+  }
+}
 
 // Frontend fetches this to subscribe without needing a build-time env var
 router.get('/vapid-public-key', (req, res) => {
@@ -61,6 +65,7 @@ router.post('/check', async (req, res, next) => {
       )
     `).all([threeDaysAgo]);
 
+    initVapid();
     let sent = 0;
     for (const sub of subs) {
       try {
