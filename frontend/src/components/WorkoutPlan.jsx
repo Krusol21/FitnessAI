@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
 
@@ -48,6 +48,86 @@ function normalizePlan(raw) {
   };
 }
 
+// Global rest timer — one active timer at a time across the whole page
+function useRestTimer() {
+  const [activeKey, setActiveKey] = useState(null); // exercise name
+  const [remaining, setRemaining] = useState(0);    // seconds left
+  const intervalRef = useRef(null);
+
+  const start = useCallback((key, minutes) => {
+    clearInterval(intervalRef.current);
+    const secs = Math.round((minutes || 3) * 60);
+    setActiveKey(key);
+    setRemaining(secs);
+    intervalRef.current = setInterval(() => {
+      setRemaining(r => {
+        if (r <= 1) {
+          clearInterval(intervalRef.current);
+          return 0;
+        }
+        return r - 1;
+      });
+    }, 1000);
+  }, []);
+
+  const cancel = useCallback(() => {
+    clearInterval(intervalRef.current);
+    setActiveKey(null);
+    setRemaining(0);
+  }, []);
+
+  useEffect(() => () => clearInterval(intervalRef.current), []);
+  return { activeKey, remaining, start, cancel };
+}
+
+function RestTimerButton({ exerciseKey, restMinutes, timer }) {
+  const isActive = timer.activeKey === exerciseKey;
+  const mins = restMinutes || 3;
+  const totalSecs = Math.round(mins * 60);
+
+  if (!isActive) {
+    return (
+      <button
+        onClick={() => timer.start(exerciseKey, mins)}
+        className="flex items-center gap-1 text-xs text-gray-600 hover:text-blue-400 transition-colors"
+        title={`Start ${mins} min rest timer`}
+      >
+        ⏱ {mins} min rest
+      </button>
+    );
+  }
+
+  const done = timer.remaining === 0;
+  const pct = done ? 100 : Math.round(((totalSecs - timer.remaining) / totalSecs) * 100);
+  const m = Math.floor(timer.remaining / 60);
+  const s = String(timer.remaining % 60).padStart(2, '0');
+
+  return (
+    <button
+      onClick={timer.cancel}
+      className={`flex items-center gap-2 text-xs px-2 py-1 rounded-lg transition-colors ${
+        done
+          ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+          : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+      }`}
+      title="Tap to cancel"
+    >
+      <span className="relative w-4 h-4 flex-shrink-0">
+        <svg className="w-4 h-4 -rotate-90" viewBox="0 0 16 16">
+          <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeOpacity="0.2" strokeWidth="2" />
+          <circle
+            cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeWidth="2"
+            strokeDasharray={`${2 * Math.PI * 6}`}
+            strokeDashoffset={`${2 * Math.PI * 6 * (1 - pct / 100)}`}
+            strokeLinecap="round"
+          />
+        </svg>
+      </span>
+      {done ? 'Go!' : `${m}:${s}`}
+    </button>
+  );
+}
+
 export default function WorkoutPlan() {
   const [plan, setPlan] = useState(undefined);
   const [activeDay, setActiveDay] = useState('squat_day');
@@ -56,6 +136,7 @@ export default function WorkoutPlan() {
   const [showRaw, setShowRaw] = useState(false);
   const [rawApiResponse, setRawApiResponse] = useState(null);
   const navigate = useNavigate();
+  const timer = useRestTimer();
 
   function load() {
     client.get('/workouts/plan')
@@ -257,9 +338,11 @@ export default function WorkoutPlan() {
                       </span>
                     )}
                     {mainLift.rest_minutes && (
-                      <span className="text-gray-600 text-xs">
-                        ⏱ {mainLift.rest_minutes} min rest
-                      </span>
+                      <RestTimerButton
+                        exerciseKey={mainLift.name}
+                        restMinutes={mainLift.rest_minutes}
+                        timer={timer}
+                      />
                     )}
                     {isDeload && (
                       <span className="bg-yellow-500/20 text-yellow-400 text-xs px-2 py-1 rounded-lg">
@@ -281,7 +364,7 @@ export default function WorkoutPlan() {
               <p className="text-xs text-gray-500 uppercase tracking-wider mb-3">Accessories</p>
               <div className="space-y-4">
                 {accessories.map((ex, i) => (
-                  <AccessoryRow key={i} exercise={ex} checked={checked} toggle={toggle} />
+                  <AccessoryRow key={i} exercise={ex} checked={checked} toggle={toggle} timer={timer} />
                 ))}
               </div>
             </div>
@@ -307,7 +390,7 @@ export default function WorkoutPlan() {
   );
 }
 
-function AccessoryRow({ exercise, checked, toggle }) {
+function AccessoryRow({ exercise, checked, toggle, timer }) {
   const name = typeof exercise === 'string' ? exercise : exercise.name;
   const sets = typeof exercise === 'object' ? exercise.sets : null;
   const reps = typeof exercise === 'object' ? exercise.reps : null;
@@ -325,14 +408,14 @@ function AccessoryRow({ exercise, checked, toggle }) {
       <input type="checkbox" className="hidden" checked={done} onChange={() => toggle(name)} />
       <div className="flex-1">
         <p className={`text-sm font-medium ${done ? 'line-through text-gray-500' : 'text-white'}`}>{name}</p>
-        <div className="flex flex-wrap items-center gap-2 mt-1">
+        <div className="flex flex-wrap items-center gap-2 mt-1" onClick={e => e.preventDefault()}>
           {(sets || reps) && (
             <span className="text-xs text-gray-500">
               {sets && `${sets} sets`}{sets && reps && ' × '}{reps && `${reps} reps`}
             </span>
           )}
           {rest && (
-            <span className="text-xs text-gray-600">⏱ {rest} min rest</span>
+            <RestTimerButton exerciseKey={name} restMinutes={rest} timer={timer} />
           )}
         </div>
         {notes && <p className="text-xs text-gray-600 mt-1 leading-relaxed">{notes}</p>}

@@ -52,7 +52,6 @@ const TOOL_DEFINITIONS = [
         serving_size: { type: 'number' },
         serving_unit: { type: 'string' },
         servings: { type: 'number', description: 'Number of servings consumed (default 1)' },
-        logged_at: { type: 'string' },
       },
       required: ['name', 'calories'],
     },
@@ -221,8 +220,11 @@ async function executeTool(toolName, toolInput, userId, dateContext = {}) {
     `).run([foodId, userId, toolInput.name, toolInput.calories, toolInput.protein_g || 0, toolInput.carbs_g || 0, toolInput.fat_g || 0, toolInput.sugar_g || 0, toolInput.serving_size || 1, toolInput.serving_unit || 'serving']);
     const food = await db.prepare('SELECT id FROM foods WHERE user_id = ? AND name = ?').get([userId, toolInput.name]);
     const logId = uuidv4();
+    // Always use server time — never trust logged_at from Claude (it often passes a bare
+    // date string like "2026-07-21" which PostgreSQL stores as UTC midnight, placing the
+    // entry outside the user's local-day bounds and making it invisible in the log tab.
     await db.prepare('INSERT INTO nutrition_logs (id, user_id, food_id, servings, logged_at) VALUES (?, ?, ?, ?, ?)')
-      .run([logId, userId, food.id, toolInput.servings || 1, toolInput.logged_at || new Date().toISOString()]);
+      .run([logId, userId, food.id, toolInput.servings || 1, new Date().toISOString()]);
     return JSON.stringify({ ok: true, food_id: food.id, log_id: logId });
   }
 
