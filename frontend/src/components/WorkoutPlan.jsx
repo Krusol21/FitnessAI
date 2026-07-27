@@ -34,7 +34,7 @@ function normalizePlan(raw) {
     const acc = (day.accessories || []).map(a =>
       typeof a === 'string' ? { name: a, sets: null, reps: null } : a
     );
-    return { ...day, main_lift: ml, accessories: acc };
+    return { ...day, main_lift: ml, accessories: acc, cooldown: day.cooldown || [] };
   }
 
   return {
@@ -48,32 +48,61 @@ function normalizePlan(raw) {
   };
 }
 
-// Global rest timer — one active timer at a time across the whole page
+const TIMER_KEY = 'fitnessai_rest_timer';
+
+// Global rest timer — persists across screen lock via localStorage + server push
 function useRestTimer() {
-  const [activeKey, setActiveKey] = useState(null); // exercise name
-  const [remaining, setRemaining] = useState(0);    // seconds left
+  const [activeKey, setActiveKey] = useState(null);
+  const [remaining, setRemaining] = useState(0);
   const intervalRef = useRef(null);
+
+  // Restore an in-progress timer on mount (e.g. user came back from locked screen)
+  useEffect(() => {
+    const saved = localStorage.getItem(TIMER_KEY);
+    if (!saved) return;
+    try {
+      const { key, endsAt, totalSecs } = JSON.parse(saved);
+      const left = Math.round((endsAt - Date.now()) / 1000);
+      if (left > 0) {
+        setActiveKey(key);
+        setRemaining(left);
+        intervalRef.current = setInterval(() => {
+          setRemaining(r => {
+            if (r <= 1) { clearInterval(intervalRef.current); return 0; }
+            return r - 1;
+          });
+        }, 1000);
+      } else {
+        localStorage.removeItem(TIMER_KEY);
+      }
+    } catch { localStorage.removeItem(TIMER_KEY); }
+    return () => clearInterval(intervalRef.current);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const start = useCallback((key, minutes) => {
     clearInterval(intervalRef.current);
     const secs = Math.round((minutes || 3) * 60);
+    const endsAt = Date.now() + secs * 1000;
+    localStorage.setItem(TIMER_KEY, JSON.stringify({ key, endsAt, totalSecs: secs }));
     setActiveKey(key);
     setRemaining(secs);
     intervalRef.current = setInterval(() => {
       setRemaining(r => {
-        if (r <= 1) {
-          clearInterval(intervalRef.current);
-          return 0;
-        }
+        if (r <= 1) { clearInterval(intervalRef.current); localStorage.removeItem(TIMER_KEY); return 0; }
         return r - 1;
       });
     }, 1000);
+    // Fire push notification via server in case screen goes off
+    import('../api/client').then(m => m.default.post('/notifications/rest-timer', { seconds: secs, exerciseName: key })).catch(() => {});
   }, []);
 
   const cancel = useCallback(() => {
     clearInterval(intervalRef.current);
+    localStorage.removeItem(TIMER_KEY);
     setActiveKey(null);
     setRemaining(0);
+    import('../api/client').then(m => m.default.delete('/notifications/rest-timer')).catch(() => {});
   }, []);
 
   useEffect(() => () => clearInterval(intervalRef.current), []);
@@ -365,6 +394,29 @@ export default function WorkoutPlan() {
               <div className="space-y-4">
                 {accessories.map((ex, i) => (
                   <AccessoryRow key={i} exercise={ex} checked={checked} toggle={toggle} timer={timer} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Cooldown stretches */}
+          {dayData.cooldown?.length > 0 && (
+            <div className="bg-gray-900 rounded-2xl border border-gray-800 p-4 mb-4">
+              <p className="text-xs text-gray-500 uppercase tracking-wider mb-3">🧘 Cooldown & Stretches</p>
+              <div className="space-y-2">
+                {dayData.cooldown.map((s, i) => (
+                  <div key={i} className="flex items-start justify-between gap-3">
+                    <div className="flex-1">
+                      <p className="text-sm text-white">{s.name}</p>
+                      {s.notes && <p className="text-xs text-gray-600 mt-0.5">{s.notes}</p>}
+                    </div>
+                    <span className="text-xs text-gray-500 flex-shrink-0 mt-0.5">
+                      {s.duration_seconds >= 60
+                        ? `${Math.floor(s.duration_seconds / 60)}min${s.duration_seconds % 60 ? ` ${s.duration_seconds % 60}s` : ''}`
+                        : `${s.duration_seconds}s`}
+                      {s.duration_seconds && s.name?.toLowerCase().includes('/side') ? ' / side' : ''}
+                    </span>
+                  </div>
                 ))}
               </div>
             </div>

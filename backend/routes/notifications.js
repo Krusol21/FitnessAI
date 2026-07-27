@@ -6,6 +6,9 @@ const { authenticate } = require('./middleware');
 
 const router = express.Router();
 
+// In-memory: one active rest timer per user (cleared on fire or cancel)
+const activeTimers = new Map();
+
 function initVapid() {
   if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
     webpush.setVapidDetails(
@@ -43,6 +46,55 @@ router.delete('/subscribe', authenticate, async (req, res, next) => {
     await db.prepare('DELETE FROM push_subscriptions WHERE user_id = ?').run([req.userId]);
     res.json({ ok: true });
   } catch (err) { next(err); }
+});
+
+// Start a rest timer — fires a push notification after `seconds` seconds
+router.post('/rest-timer', authenticate, async (req, res, next) => {
+  try {
+    const { seconds, exerciseName } = req.body;
+    if (!seconds || seconds < 1) return res.status(400).json({ error: 'seconds required' });
+    const userId = req.userId;
+
+    // Cancel any existing timer for this user
+    if (activeTimers.has(userId)) clearTimeout(activeTimers.get(userId));
+
+    const db = getDb();
+    const sub = await db.prepare('SELECT subscription_json FROM push_subscriptions WHERE user_id = ?').get([userId]);
+    if (!sub) return res.json({ ok: true, push: false });
+
+    initVapid();
+    const handle = setTimeout(async () => {
+      activeTimers.delete(userId);
+      try {
+        await webpush.sendNotification(
+          JSON.parse(sub.subscription_json),
+          JSON.stringify({
+            title: 'Rest complete — time to go',
+            body: exerciseName ? `Back to ${exerciseName}.` : 'Get back under the bar.',
+            url: '/workout',
+          })
+        );
+      } catch (err) {
+        if (err.statusCode === 410 || err.statusCode === 404) {
+          const db2 = getDb();
+          await db2.prepare('DELETE FROM push_subscriptions WHERE user_id = ?').run([userId]);
+        }
+      }
+    }, seconds * 1000);
+
+    activeTimers.set(userId, handle);
+    res.json({ ok: true, push: true });
+  } catch (err) { next(err); }
+});
+
+// Cancel an active rest timer
+router.delete('/rest-timer', authenticate, (req, res) => {
+  const userId = req.userId;
+  if (activeTimers.has(userId)) {
+    clearTimeout(activeTimers.get(userId));
+    activeTimers.delete(userId);
+  }
+  res.json({ ok: true });
 });
 
 // Called by external cron (cron-job.org) once a day — sends reminders to users

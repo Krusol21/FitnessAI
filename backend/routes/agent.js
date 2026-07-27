@@ -39,6 +39,11 @@ Squat day: 1–2 squat variations (pause squat builds out of the hole; box squat
 Bench day: 1–2 pressing variations (close-grip bench for tricep lockout; incline bench for upper pec/off-chest drive; dips for mass) + 2 tricep isolation exercises (pushdowns, skull crushers, or JM press) + ALWAYS include face pulls or band pull-aparts for shoulder health — this is non-negotiable for long-term bench longevity.
 Deadlift day: 1–2 posterior chain exercises (RDL for hamstring length and hip hinge; deficit deadlift builds off the floor; good mornings for spinal erectors) + 1–2 back exercises (Pendlay row or chest-supported row for thickness; lat pulldown or pull-ups for width and bar-path control) + 1 bicep/grip exercise (hammer curls protect against elbow tendinopathy; farmer's walks build grip and conditioning).
 
+POST-WORKOUT COOLDOWN (per day, 10 min after the last set — non-negotiable for longevity):
+- Squat day: Hip flexor stretch 60s/side, pigeon pose 60s/side, quad stretch 45s/side, seated hamstring stretch 60s/side, child's pose 90s
+- Bench day: Doorway chest stretch 60s/side, cross-body shoulder stretch 45s/side, tricep overhead stretch 30s/side, thoracic extension over foam roller 60s, neck rolls 30s
+- Deadlift day: Cat-cow 10 reps slow, seated piriformis stretch 60s/side, standing hamstring stretch 60s/side, lying glute stretch 60s/side, supine spinal twist 30s/side
+
 TECHNIQUE CUES to include in notes for main lifts:
 - Squat: "Big breath into belly, 360° brace before unracking. Screw feet into the floor. Push knees out over toes. Drive through the floor, not the bar."
 - Bench: "Scapulas retracted and depressed — pinch a pencil between shoulder blades. Pull the bar apart. Elbows at 45–75° from torso, not flared. Leg drive through the floor."

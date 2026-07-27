@@ -29,8 +29,10 @@ export default function Dashboard() {
     client.get('/progress/weight').then(r => setWeights(r.data)).catch(() => {});
     client.get('/progress/prs').then(r => setPrs(r.data)).catch(() => {});
     client.get('/workouts/plan').then(r => setPlan(r.data)).catch(() => {});
-    const today = new Date().toISOString().split('T')[0];
-    client.get(`/nutrition/summary?date=${today}`).then(r => setNutrition(r.data)).catch(() => {});
+    const now = new Date();
+    const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    const dayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString();
+    client.get(`/nutrition/summary?start=${dayStart}&end=${dayEnd}`).then(r => setNutrition(r.data)).catch(() => {});
   }, []);
 
   async function logWeight(e) {

@@ -67,12 +67,8 @@ const TOOL_DEFINITIONS = [
   },
   {
     name: 'get_nutrition_summary',
-    description: 'Get today\'s (or a specific date\'s) macro totals from logged food.',
-    input_schema: {
-      type: 'object',
-      properties: { date: { type: 'string', description: 'YYYY-MM-DD (optional, defaults to today)' } },
-      required: [],
-    },
+    description: "Get today's macro totals (calories, protein, carbs, fat, sugar) from logged food. Always returns today based on the user's local time — do not pass a date.",
+    input_schema: { type: 'object', properties: {}, required: [] },
   },
   {
     name: 'get_workout_plan',
@@ -142,7 +138,21 @@ const TOOL_DEFINITIONS = [
                   },
                 },
               },
-              required: ['pre_workout', 'main_lift', 'accessories'],
+                cooldown: {
+                  type: 'array',
+                  description: '4-6 post-workout stretches. Hold times should match the muscle groups trained that day.',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      name: { type: 'string' },
+                      duration_seconds: { type: 'integer', description: 'Hold or duration in seconds (e.g. 60)' },
+                      notes: { type: 'string', description: 'Brief cue or instruction' },
+                    },
+                    required: ['name', 'duration_seconds'],
+                  },
+                },
+              },
+              required: ['pre_workout', 'main_lift', 'accessories', 'cooldown'],
             },
           },
         },
@@ -234,19 +244,10 @@ async function executeTool(toolName, toolInput, userId, dateContext = {}) {
   }
 
   if (toolName === 'get_nutrition_summary') {
-    // If the coach passes an explicit date, compute UTC bounds for that local date;
-    // otherwise use the day bounds passed from the user's browser (correct local time).
-    let start, end;
-    if (toolInput.date) {
-      // Treat as local midnight UTC (best we can do without knowing the tz offset here)
-      start = new Date(toolInput.date + 'T00:00:00').toISOString();
-      end = new Date(toolInput.date + 'T00:00:00');
-      end.setDate(end.getDate() + 1);
-      end = end.toISOString();
-    } else {
-      start = dateContext.dayStart || new Date(new Date().setHours(0,0,0,0)).toISOString();
-      end = dateContext.dayEnd || new Date(new Date().setHours(24,0,0,0)).toISOString();
-    }
+    // Always use browser-provided local-day bounds — the server doesn't know the user's
+    // timezone so any server-side date math would be wrong for non-UTC users.
+    const start = dateContext.dayStart || new Date(new Date().setHours(0,0,0,0)).toISOString();
+    const end = dateContext.dayEnd || new Date(new Date().setHours(24,0,0,0)).toISOString();
     const totals = await db.prepare(`
       SELECT COUNT(*) as entries,
         ROUND(SUM(nl.servings * f.calories)::numeric, 1) as total_calories,
@@ -263,7 +264,7 @@ async function executeTool(toolName, toolInput, userId, dateContext = {}) {
       WHERE nl.user_id = ? AND nl.logged_at >= ?::timestamptz AND nl.logged_at < ?::timestamptz
       ORDER BY nl.logged_at ASC
     `).all([userId, start, end]);
-    return JSON.stringify({ date: toolInput.date || dateContext.localDate, ...totals, items });
+    return JSON.stringify({ date: dateContext.localDate, ...totals, items });
   }
 
   if (toolName === 'get_workout_plan') {
