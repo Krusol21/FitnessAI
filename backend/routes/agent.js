@@ -53,9 +53,13 @@ When you talk about training, you weave in the science naturally — not to lect
 
 Your responses should read like a text from a knowledgeable coach — flowing, direct, warm but not fluffy. If something is wrong with their approach, say so clearly and explain why. If they're doing well, acknowledge it specifically and build on it. Keep replies focused: make your key point, back it up briefly if the science is relevant, and move on. Don't pad responses.
 
-A few things you always handle correctly behind the scenes: you only reference real logged data and never invent numbers. When the user mentions eating something, use your nutrition knowledge to estimate the macros based on typical portion sizes and food composition — then log it immediately with log_food. Be transparent that it's your best estimate (e.g. "A medium chicken breast with a cup of white rice is roughly 400 cal, 42g protein, 45g carbs, 5g fat — logging that now"). Only ask the user for specifics if the food is genuinely ambiguous (e.g. a home-cooked dish with unknown ingredients or a restaurant item with no standard reference). When they mention a new PR, you log it with update_pr. When they mention their body weight, you log it with log_weight. You proactively notice patterns in their data — low protein relative to training volume, calorie intake on rest days vs. training days, stalled PRs that might signal a programming adjustment. Always check which cycle week they're on before giving training advice so your recommendations match their current phase. During deload week, you don't suggest pushing intensity — you explain why the 70% work is doing exactly what it needs to do. During rest week, you let recovery be the focus.
+A few things you always handle correctly behind the scenes: you only reference real logged data and never invent numbers.
 
-CRITICAL — tool calls: Whenever you build or update a workout plan, you MUST call create_workout_plan with the full structured plan_json so it gets saved. Never describe a plan in text without also saving it — the user can't see anything that isn't stored via tools. If a message asks for multiple things (log PRs and build a plan, for example), complete every tool call before writing your reply — don't stop after the first batch.`;
+FOOD LOGGING — this is important: when the user mentions eating something, IMMEDIATELY call log_food with your best macro estimate in the SAME response — do not say "I'll log that" or "logging now" without also calling the tool in this exact turn. Use your built-in nutrition knowledge for estimates. Be transparent: "A medium chicken breast with a cup of white rice is roughly 400 cal, 42g protein, 45g carbs, 5g fat — logging that now." Do NOT call search_food_library before logging a described food — you already know its nutrition profile, just estimate and log directly. Only ask for specifics if the food is genuinely unidentifiable (an unusual home recipe with mystery ingredients). Everything else you can estimate confidently.
+
+When they mention a new PR, log it with update_pr. When they mention their body weight, log it with log_weight. Proactively notice patterns — low protein relative to training volume, calorie intake on rest days vs. training days, stalled PRs that might signal a programming adjustment. Always check which cycle week they're on before giving training advice. During deload week, don't suggest pushing intensity. During rest week, let recovery be the focus.
+
+CRITICAL — tool calls: Whenever you build or update a workout plan, you MUST call create_workout_plan with the full structured plan_json so it gets saved. Never describe a plan in text without also saving it. If a message asks for multiple things, complete every tool call before writing your reply.`;
 
 router.post('/chat', async (req, res, next) => {
   try {
@@ -67,15 +71,20 @@ router.post('/chat', async (req, res, next) => {
 
     // Inject the user's local date so the coach always knows what day it is
     const dateLine = localDate ? `\n\nToday's date (user's local time): ${localDate}.` : '';
-    const SYSTEM_PROMPT = BASE_SYSTEM_PROMPT + dateLine;
+    // Cache the large static system prompt; append the small dynamic date line uncached.
+    // The cache saves re-paying for ~3000 tokens of system prompt on every request.
+    const SYSTEM_PROMPT = [
+      { type: 'text', text: BASE_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
+      ...(dateLine ? [{ type: 'text', text: dateLine }] : []),
+    ];
 
     // Save user message
     await db.prepare('INSERT INTO conversations (id, user_id, role, content) VALUES (?, ?, ?, ?)')
       .run([uuidv4(), userId, 'user', message]);
 
-    // Load last 40 messages for context
+    // Load last 25 messages for context (trimmed from 40 to reduce input tokens)
     const history = (await db.prepare(
-      'SELECT role, content FROM conversations WHERE user_id = ? ORDER BY created_at DESC LIMIT 40'
+      'SELECT role, content FROM conversations WHERE user_id = ? ORDER BY created_at DESC LIMIT 25'
     ).all([userId])).reverse();
 
     // Build messages array
@@ -86,7 +95,7 @@ router.post('/chat', async (req, res, next) => {
     // Agentic tool-use loop
     let response = await client.messages.create({
       model: 'claude-sonnet-5',
-      max_tokens: 4096,
+      max_tokens: 2048,
       system: SYSTEM_PROMPT,
       tools: TOOL_DEFINITIONS,
       messages,
@@ -113,7 +122,7 @@ router.post('/chat', async (req, res, next) => {
 
       response = await client.messages.create({
         model: 'claude-sonnet-5',
-        max_tokens: 4096,
+        max_tokens: 2048,
         system: SYSTEM_PROMPT,
         tools: TOOL_DEFINITIONS,
         messages,

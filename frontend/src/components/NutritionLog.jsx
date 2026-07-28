@@ -137,18 +137,19 @@ export default function NutritionLog() {
     load();
   }
 
-  const macroBar = (val, max, color) => (
-    <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
-      <div className={`h-full ${color} rounded-full`} style={{ width: `${Math.min(100, (val / max) * 100)}%` }} />
-    </div>
-  );
+  const CAL_TARGET = 2500;
+  const MACROS = [
+    { label: 'Protein', val: summary?.total_protein_g, target: 180, color: 'bg-blue-500', unit: 'g' },
+    { label: 'Carbs',   val: summary?.total_carbs_g,   target: 250, color: 'bg-yellow-500', unit: 'g' },
+    { label: 'Fat',     val: summary?.total_fat_g,      target: 80,  color: 'bg-orange-500', unit: 'g' },
+    { label: 'Sugar',   val: summary?.total_sugar_g,    target: 50,  color: 'bg-red-500', unit: 'g' },
+  ];
 
   return (
     <div className="md:ml-52 p-4 max-w-2xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold text-white">Nutrition</h2>
         <div className="flex gap-2">
-          {/* Camera scan button */}
           <label className="cursor-pointer bg-gray-800 hover:bg-gray-700 text-white px-3 py-2 rounded-xl text-sm flex items-center gap-2 transition-colors">
             📷 Scan
             <input
@@ -172,23 +173,40 @@ export default function NutritionLog() {
       {/* Daily summary */}
       {summary && (
         <div className="bg-gray-900 rounded-2xl border border-gray-800 p-4 mb-4">
-          <div className="flex justify-between items-center mb-3">
-            <p className="text-sm text-gray-400">Today's Macros</p>
-            <p className="text-lg font-bold text-white">{Math.round(summary.total_calories || 0)} kcal</p>
+          <p className="text-sm text-gray-400 mb-3">Today's Macros</p>
+
+          {/* Calorie bar */}
+          <div className="mb-4">
+            <div className="flex justify-between items-baseline mb-1.5">
+              <span className="text-xs text-gray-400">Calories</span>
+              <span className="text-xs text-white font-medium">
+                {Math.round(summary.total_calories || 0)} / {CAL_TARGET} kcal
+              </span>
+            </div>
+            <div className="h-2.5 bg-gray-700 rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all"
+                style={{ width: `${Math.min(100, ((summary.total_calories || 0) / CAL_TARGET) * 100)}%` }}
+              />
+            </div>
           </div>
-          <div className="grid grid-cols-4 gap-3">
-            {[
-              { label: 'Protein', val: summary.total_protein_g, target: 180, color: 'bg-blue-500', unit: 'g' },
-              { label: 'Carbs', val: summary.total_carbs_g, target: 250, color: 'bg-yellow-500', unit: 'g' },
-              { label: 'Fat', val: summary.total_fat_g, target: 80, color: 'bg-orange-500', unit: 'g' },
-              { label: 'Sugar', val: summary.total_sugar_g, target: 50, color: 'bg-red-500', unit: 'g' },
-            ].map(m => (
+
+          {/* Macro bars */}
+          <div className="space-y-3">
+            {MACROS.map(m => (
               <div key={m.label}>
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-gray-400">{m.label}</span>
-                  <span className="text-white">{Math.round(m.val || 0)}{m.unit}</span>
+                <div className="flex justify-between items-baseline mb-1">
+                  <span className="text-xs text-gray-400">{m.label}</span>
+                  <span className="text-xs text-white font-medium">
+                    {Math.round(m.val || 0)} / {m.target}{m.unit}
+                  </span>
                 </div>
-                {macroBar(m.val || 0, m.target, m.color)}
+                <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full ${m.color} rounded-full transition-all`}
+                    style={{ width: `${Math.min(100, ((m.val || 0) / m.target) * 100)}%` }}
+                  />
+                </div>
               </div>
             ))}
           </div>

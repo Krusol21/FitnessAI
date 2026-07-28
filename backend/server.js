@@ -14,6 +14,9 @@ const allowedOrigins = [
 app.use(cors({ origin: allowedOrigins }));
 app.use(express.json({ limit: '15mb' }));
 
+// Keepalive — hit by a separate cron-job.org job every 14 min to prevent Render spin-down
+app.get('/api/ping', (req, res) => res.json({ ok: true, t: Date.now() }));
+
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/progress', require('./routes/progress'));
 app.use('/api/nutrition', require('./routes/nutrition'));

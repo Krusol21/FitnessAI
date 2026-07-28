@@ -61,16 +61,15 @@ function useRestTimer() {
     const saved = localStorage.getItem(TIMER_KEY);
     if (!saved) return;
     try {
-      const { key, endsAt, totalSecs } = JSON.parse(saved);
+      const { key, endsAt } = JSON.parse(saved);
       const left = Math.round((endsAt - Date.now()) / 1000);
       if (left > 0) {
         setActiveKey(key);
         setRemaining(left);
         intervalRef.current = setInterval(() => {
-          setRemaining(r => {
-            if (r <= 1) { clearInterval(intervalRef.current); return 0; }
-            return r - 1;
-          });
+          const l = Math.round((endsAt - Date.now()) / 1000);
+          if (l <= 0) { clearInterval(intervalRef.current); localStorage.removeItem(TIMER_KEY); setRemaining(0); }
+          else setRemaining(l);
         }, 1000);
       } else {
         localStorage.removeItem(TIMER_KEY);
@@ -87,11 +86,17 @@ function useRestTimer() {
     localStorage.setItem(TIMER_KEY, JSON.stringify({ key, endsAt, totalSecs: secs }));
     setActiveKey(key);
     setRemaining(secs);
+    // Calculate from absolute timestamp each tick — stays accurate even when the browser
+    // throttles intervals in the background (e.g. screen locked, tab backgrounded).
     intervalRef.current = setInterval(() => {
-      setRemaining(r => {
-        if (r <= 1) { clearInterval(intervalRef.current); localStorage.removeItem(TIMER_KEY); return 0; }
-        return r - 1;
-      });
+      const left = Math.round((endsAt - Date.now()) / 1000);
+      if (left <= 0) {
+        clearInterval(intervalRef.current);
+        localStorage.removeItem(TIMER_KEY);
+        setRemaining(0);
+      } else {
+        setRemaining(left);
+      }
     }, 1000);
     // Fire push notification via server in case screen goes off
     import('../api/client').then(m => m.default.post('/notifications/rest-timer', { seconds: secs, exerciseName: key })).catch(() => {});

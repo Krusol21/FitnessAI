@@ -87,6 +87,28 @@ router.post('/rest-timer', authenticate, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Send yourself a test push — lets you verify the full stack without waiting for cron
+router.post('/test', authenticate, async (req, res, next) => {
+  try {
+    const db = getDb();
+    const sub = await db.prepare('SELECT subscription_json FROM push_subscriptions WHERE user_id = ?').get([req.userId]);
+    if (!sub) return res.status(404).json({ error: 'No push subscription found. Open the app in your PWA (home screen) to register.' });
+    initVapid();
+    await webpush.sendNotification(
+      JSON.parse(sub.subscription_json),
+      JSON.stringify({ title: 'FitnessAI — push works!', body: 'Notifications are set up correctly.', url: '/' })
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.statusCode === 410 || err.statusCode === 404) {
+      const db = getDb();
+      await db.prepare('DELETE FROM push_subscriptions WHERE user_id = ?').run([req.userId]);
+      return res.status(410).json({ error: 'Subscription expired — re-open PWA to re-register.' });
+    }
+    next(err);
+  }
+});
+
 // Cancel an active rest timer
 router.delete('/rest-timer', authenticate, (req, res) => {
   const userId = req.userId;
