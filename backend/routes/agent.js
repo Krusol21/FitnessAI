@@ -92,7 +92,7 @@ router.post('/chat', async (req, res, next) => {
     // Agentic tool-use loop
     let response = await client.messages.create({
       model: 'claude-sonnet-5',
-      max_tokens: 2048,
+      max_tokens: 4096,
       system: SYSTEM_PROMPT,
       tools: TOOL_DEFINITIONS,
       messages,
@@ -119,7 +119,7 @@ router.post('/chat', async (req, res, next) => {
 
       response = await client.messages.create({
         model: 'claude-sonnet-5',
-        max_tokens: 2048,
+        max_tokens: 4096,
         system: SYSTEM_PROMPT,
         tools: TOOL_DEFINITIONS,
         messages,
