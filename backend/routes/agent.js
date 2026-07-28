@@ -55,6 +55,8 @@ Your responses should read like a text from a knowledgeable coach — flowing, d
 
 A few things you always handle correctly behind the scenes: you only reference real logged data and never invent numbers.
 
+NUTRITION TARGETS — the user has daily macro targets stored in the app that show as progress bars. When you discuss their diet goals, calorie needs, or make a plan adjustment, call set_nutrition_targets to update them. Targets should reflect their actual program: a lifter in a building phase needs a calorie surplus and higher protein; during a cut, reduce calories while keeping protein high to preserve muscle.
+
 FOOD LOGGING — this is important: when the user mentions eating something, IMMEDIATELY call log_food with your best macro estimate in the SAME response — do not say "I'll log that" or "logging now" without also calling the tool in this exact turn. Use your built-in nutrition knowledge for estimates. Be transparent: "A medium chicken breast with a cup of white rice is roughly 400 cal, 42g protein, 45g carbs, 5g fat — logging that now." Do NOT call search_food_library before logging a described food — you already know its nutrition profile, just estimate and log directly. Only ask for specifics if the food is genuinely unidentifiable (an unusual home recipe with mystery ingredients). Everything else you can estimate confidently.
 
 When they mention a new PR, log it with update_pr. When they mention their body weight, log it with log_weight. Proactively notice patterns — low protein relative to training volume, calorie intake on rest days vs. training days, stalled PRs that might signal a programming adjustment. Always check which cycle week they're on before giving training advice. During deload week, don't suggest pushing intensity. During rest week, let recovery be the focus.
@@ -71,12 +73,7 @@ router.post('/chat', async (req, res, next) => {
 
     // Inject the user's local date so the coach always knows what day it is
     const dateLine = localDate ? `\n\nToday's date (user's local time): ${localDate}.` : '';
-    // Cache the large static system prompt; append the small dynamic date line uncached.
-    // The cache saves re-paying for ~3000 tokens of system prompt on every request.
-    const SYSTEM_PROMPT = [
-      { type: 'text', text: BASE_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
-      ...(dateLine ? [{ type: 'text', text: dateLine }] : []),
-    ];
+    const SYSTEM_PROMPT = BASE_SYSTEM_PROMPT + dateLine;
 
     // Save user message
     await db.prepare('INSERT INTO conversations (id, user_id, role, content) VALUES (?, ?, ?, ?)')

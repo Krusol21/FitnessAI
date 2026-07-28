@@ -128,4 +128,29 @@ router.get('/summary', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+const DEFAULT_TARGETS = { calories: 2500, protein_g: 180, carbs_g: 250, fat_g: 80, sugar_g: 50 };
+
+router.get('/targets', async (req, res, next) => {
+  try {
+    const db = getDb();
+    const row = await db.prepare('SELECT nutrition_targets FROM users WHERE id = ?').get([req.userId]);
+    const stored = row?.nutrition_targets;
+    res.json(stored ? { ...DEFAULT_TARGETS, ...stored } : DEFAULT_TARGETS);
+  } catch (err) { next(err); }
+});
+
+router.patch('/targets', async (req, res, next) => {
+  try {
+    const allowed = ['calories', 'protein_g', 'carbs_g', 'fat_g', 'sugar_g'];
+    const update = Object.fromEntries(Object.entries(req.body).filter(([k]) => allowed.includes(k)));
+    if (!Object.keys(update).length) return res.status(400).json({ error: 'No valid targets provided' });
+    const db = getDb();
+    // Merge with existing targets
+    const row = await db.prepare('SELECT nutrition_targets FROM users WHERE id = ?').get([req.userId]);
+    const merged = { ...(row?.nutrition_targets || {}), ...update };
+    await db.prepare('UPDATE users SET nutrition_targets = ?::jsonb WHERE id = ?').run([JSON.stringify(merged), req.userId]);
+    res.json({ ok: true, targets: { ...DEFAULT_TARGETS, ...merged } });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

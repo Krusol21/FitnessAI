@@ -99,7 +99,7 @@ function useRestTimer() {
       }
     }, 1000);
     // Fire push notification via server in case screen goes off
-    import('../api/client').then(m => m.default.post('/notifications/rest-timer', { seconds: secs, exerciseName: key })).catch(() => {});
+    client.post('/notifications/rest-timer', { seconds: secs, exerciseName: key }).catch(() => {});
   }, []);
 
   const cancel = useCallback(() => {
@@ -107,7 +107,7 @@ function useRestTimer() {
     localStorage.removeItem(TIMER_KEY);
     setActiveKey(null);
     setRemaining(0);
-    import('../api/client').then(m => m.default.delete('/notifications/rest-timer')).catch(() => {});
+    client.delete('/notifications/rest-timer').catch(() => {});
   }, []);
 
   useEffect(() => () => clearInterval(intervalRef.current), []);

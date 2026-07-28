@@ -118,6 +118,7 @@ async function migrate() {
     );
 
     ALTER TABLE foods ADD COLUMN IF NOT EXISTS sugar_g REAL NOT NULL DEFAULT 0;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS nutrition_targets JSONB;
 
     CREATE TABLE IF NOT EXISTS push_subscriptions (
       id TEXT PRIMARY KEY,

@@ -71,6 +71,21 @@ const TOOL_DEFINITIONS = [
     input_schema: { type: 'object', properties: {}, required: [] },
   },
   {
+    name: 'set_nutrition_targets',
+    description: "Set or update the user's daily nutrition targets (calories and macros). Call this when discussing their diet goals or after adjusting their program.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        calories: { type: 'number', description: 'Daily calorie target' },
+        protein_g: { type: 'number', description: 'Daily protein target in grams' },
+        carbs_g: { type: 'number', description: 'Daily carb target in grams' },
+        fat_g: { type: 'number', description: 'Daily fat target in grams' },
+        sugar_g: { type: 'number', description: 'Daily sugar limit in grams' },
+      },
+      required: [],
+    },
+  },
+  {
     name: 'get_workout_plan',
     description: 'Get the user\'s current active workout plan, including cycle week and phase (build/deload/off).',
     input_schema: { type: 'object', properties: {}, required: [] },
@@ -265,6 +280,15 @@ async function executeTool(toolName, toolInput, userId, dateContext = {}) {
       ORDER BY nl.logged_at ASC
     `).all([userId, start, end]);
     return JSON.stringify({ date: dateContext.localDate, ...totals, items });
+  }
+
+  if (toolName === 'set_nutrition_targets') {
+    const allowed = ['calories', 'protein_g', 'carbs_g', 'fat_g', 'sugar_g'];
+    const update = Object.fromEntries(Object.entries(toolInput).filter(([k]) => allowed.includes(k)));
+    const row = await db.prepare('SELECT nutrition_targets FROM users WHERE id = ?').get([userId]);
+    const merged = { ...(row?.nutrition_targets || {}), ...update };
+    await db.prepare('UPDATE users SET nutrition_targets = ?::jsonb WHERE id = ?').run([JSON.stringify(merged), userId]);
+    return JSON.stringify({ ok: true, targets: merged });
   }
 
   if (toolName === 'get_workout_plan') {

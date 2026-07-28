@@ -21,6 +21,7 @@ export default function Dashboard() {
   const [prs, setPrs] = useState([]);
   const [plan, setPlan] = useState(null);
   const [nutrition, setNutrition] = useState(null);
+  const [targets, setTargets] = useState({ calories: 2500, protein_g: 180 });
   const [newWeight, setNewWeight] = useState('');
   const [adding, setAdding] = useState(false);
   const navigate = useNavigate();
@@ -29,6 +30,7 @@ export default function Dashboard() {
     client.get('/progress/weight').then(r => setWeights(r.data)).catch(() => {});
     client.get('/progress/prs').then(r => setPrs(r.data)).catch(() => {});
     client.get('/workouts/plan').then(r => setPlan(r.data)).catch(() => {});
+    client.get('/nutrition/targets').then(r => setTargets(r.data)).catch(() => {});
     const now = new Date();
     const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
     const dayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString();
@@ -61,8 +63,8 @@ export default function Dashboard() {
       {/* Stats row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         <StatCard label="Current Weight" value={latestWeight ? `${latestWeight.weight_lbs} lbs` : '—'} />
-        <StatCard label="Today's Calories" value={nutrition?.total_calories ? `${Math.round(nutrition.total_calories)} kcal` : '—'} />
-        <StatCard label="Today's Protein" value={nutrition?.total_protein_g ? `${Math.round(nutrition.total_protein_g)}g` : '—'} />
+        <StatCard label="Today's Calories" value={nutrition?.total_calories ? `${Math.round(nutrition.total_calories)} / ${targets.calories}` : '—'} sub="kcal" />
+        <StatCard label="Today's Protein" value={nutrition?.total_protein_g ? `${Math.round(nutrition.total_protein_g)} / ${targets.protein_g}g` : '—'} />
         <StatCard
           label="Cycle Phase"
           value={plan ? PHASE_LABELS[plan.phase] : '—'}

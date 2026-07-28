@@ -6,6 +6,7 @@ const EMPTY_FOOD = { name: '', calories: '', protein_g: '', carbs_g: '', fat_g: 
 export default function NutritionLog() {
   const [logs, setLogs] = useState([]);
   const [summary, setSummary] = useState(null);
+  const [targets, setTargets] = useState({ calories: 2500, protein_g: 180, carbs_g: 250, fat_g: 80, sugar_g: 50 });
   const [foods, setFoods] = useState([]);
   const [form, setForm] = useState(EMPTY_FOOD);
   const [suggestions, setSuggestions] = useState([]);
@@ -30,7 +31,10 @@ export default function NutritionLog() {
     client.get(`/nutrition/summary?start=${start}&end=${end}`).then(r => setSummary(r.data)).catch(() => {});
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    client.get('/nutrition/targets').then(r => setTargets(r.data)).catch(() => {});
+  }, []);
 
   async function searchFoods(q) {
     if (!q || q.length < 2) { setSuggestions([]); return; }
@@ -137,12 +141,11 @@ export default function NutritionLog() {
     load();
   }
 
-  const CAL_TARGET = 2500;
   const MACROS = [
-    { label: 'Protein', val: summary?.total_protein_g, target: 180, color: 'bg-blue-500', unit: 'g' },
-    { label: 'Carbs',   val: summary?.total_carbs_g,   target: 250, color: 'bg-yellow-500', unit: 'g' },
-    { label: 'Fat',     val: summary?.total_fat_g,      target: 80,  color: 'bg-orange-500', unit: 'g' },
-    { label: 'Sugar',   val: summary?.total_sugar_g,    target: 50,  color: 'bg-red-500', unit: 'g' },
+    { label: 'Protein', val: summary?.total_protein_g, target: targets.protein_g, color: 'bg-blue-500', unit: 'g' },
+    { label: 'Carbs',   val: summary?.total_carbs_g,   target: targets.carbs_g,   color: 'bg-yellow-500', unit: 'g' },
+    { label: 'Fat',     val: summary?.total_fat_g,      target: targets.fat_g,    color: 'bg-orange-500', unit: 'g' },
+    { label: 'Sugar',   val: summary?.total_sugar_g,    target: targets.sugar_g,  color: 'bg-red-500', unit: 'g' },
   ];
 
   return (
@@ -180,13 +183,13 @@ export default function NutritionLog() {
             <div className="flex justify-between items-baseline mb-1.5">
               <span className="text-xs text-gray-400">Calories</span>
               <span className="text-xs text-white font-medium">
-                {Math.round(summary.total_calories || 0)} / {CAL_TARGET} kcal
+                {Math.round(summary.total_calories || 0)} / {targets.calories} kcal
               </span>
             </div>
             <div className="h-2.5 bg-gray-700 rounded-full overflow-hidden">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all"
-                style={{ width: `${Math.min(100, ((summary.total_calories || 0) / CAL_TARGET) * 100)}%` }}
+                style={{ width: `${Math.min(100, ((summary.total_calories || 0) / targets.calories) * 100)}%` }}
               />
             </div>
           </div>
