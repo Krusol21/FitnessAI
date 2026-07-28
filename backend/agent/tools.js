@@ -152,7 +152,6 @@ const TOOL_DEFINITIONS = [
                     required: ['name', 'sets', 'reps', 'rest_minutes'],
                   },
                 },
-              },
                 cooldown: {
                   type: 'array',
                   description: '4-6 post-workout stretches. Hold times should match the muscle groups trained that day.',
