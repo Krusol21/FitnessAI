@@ -176,6 +176,11 @@ const TOOL_DEFINITIONS = [
     },
   },
   {
+    name: 'send_test_notification',
+    description: 'Send a test push notification to the user to verify their notification setup is working.',
+    input_schema: { type: 'object', properties: {}, required: [] },
+  },
+  {
     name: 'log_workout',
     description: 'Log completed sets for a workout exercise.',
     input_schema: {
@@ -313,6 +318,29 @@ async function executeTool(toolName, toolInput, userId, dateContext = {}) {
     `).run([id, userId, toolInput.name, JSON.stringify(toolInput.plan_json), toolInput.cycle_start_date || new Date().toISOString().split('T')[0]]);
     console.log('[tool] plan saved with id:', id);
     return JSON.stringify({ ok: true, id, name: toolInput.name });
+  }
+
+  if (toolName === 'send_test_notification') {
+    const sub = await db.prepare('SELECT subscription_json FROM push_subscriptions WHERE user_id = ?').get([userId]);
+    if (!sub) return JSON.stringify({ ok: false, error: 'No push subscription found. Open the app from your home screen icon and grant notification permission first.' });
+    const webpush = require('web-push');
+    if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+      webpush.setVapidDetails(process.env.VAPID_EMAIL, process.env.VAPID_PUBLIC_KEY, process.env.VAPID_PRIVATE_KEY);
+    }
+    try {
+      await webpush.sendNotification(JSON.parse(sub.subscription_json), JSON.stringify({
+        title: 'FitnessAI — push works!',
+        body: 'Notifications are set up correctly.',
+        url: '/',
+      }));
+      return JSON.stringify({ ok: true });
+    } catch (err) {
+      if (err.statusCode === 410 || err.statusCode === 404) {
+        await db.prepare('DELETE FROM push_subscriptions WHERE user_id = ?').run([userId]);
+        return JSON.stringify({ ok: false, error: 'Subscription expired. Re-open the app from your home screen to re-register.' });
+      }
+      return JSON.stringify({ ok: false, error: err.message });
+    }
   }
 
   if (toolName === 'log_workout') {
