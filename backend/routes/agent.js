@@ -73,22 +73,28 @@ router.post('/chat', async (req, res, next) => {
     const db = getDb();
     const userId = req.userId;
 
-    // Inject the user's local date so the coach always knows what day it is
-    const dateLine = localDate ? `\n\nToday's date (user's local time): ${localDate}.` : '';
-    const SYSTEM_PROMPT = BASE_SYSTEM_PROMPT + dateLine;
+    // Static base is cached; dynamic date line appended uncached so it's always fresh.
+    // Cache hit saves ~90% on the ~4000 tokens of system prompt + tool definitions.
+    const SYSTEM_PROMPT = [
+      { type: 'text', text: BASE_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
+      ...(localDate ? [{ type: 'text', text: `\n\nToday's date (user's local time): ${localDate}.` }] : []),
+    ];
+
+    // Mark the last tool definition for caching so all tool schemas are cached too
+    const CACHED_TOOLS = TOOL_DEFINITIONS.map((t, i) =>
+      i === TOOL_DEFINITIONS.length - 1 ? { ...t, cache_control: { type: 'ephemeral' } } : t
+    );
 
     // Save user message
     await db.prepare('INSERT INTO conversations (id, user_id, role, content) VALUES (?, ?, ?, ?)')
       .run([uuidv4(), userId, 'user', message]);
 
-    // Load last 25 messages for context (trimmed from 40 to reduce input tokens)
+    // Load last 20 messages for context
     const history = (await db.prepare(
-      'SELECT role, content FROM conversations WHERE user_id = ? ORDER BY created_at DESC LIMIT 25'
+      'SELECT role, content FROM conversations WHERE user_id = ? ORDER BY created_at DESC LIMIT 20'
     ).all([userId])).reverse();
 
-    // Build messages array
     const messages = history.map(h => ({ role: h.role, content: h.content }));
-
     const dateContext = { localDate, dayStart, dayEnd };
 
     // Agentic tool-use loop
@@ -96,7 +102,7 @@ router.post('/chat', async (req, res, next) => {
       model: 'claude-sonnet-5',
       max_tokens: 4096,
       system: SYSTEM_PROMPT,
-      tools: TOOL_DEFINITIONS,
+      tools: CACHED_TOOLS,
       messages,
     });
 
@@ -123,7 +129,7 @@ router.post('/chat', async (req, res, next) => {
         model: 'claude-sonnet-5',
         max_tokens: 4096,
         system: SYSTEM_PROMPT,
-        tools: TOOL_DEFINITIONS,
+        tools: CACHED_TOOLS,
         messages,
       });
     }
