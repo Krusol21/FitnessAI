@@ -73,11 +73,21 @@ router.post('/chat', async (req, res, next) => {
     const db = getDb();
     const userId = req.userId;
 
-    // Static base is cached; dynamic date line appended uncached so it's always fresh.
+    // Static base is cached; dynamic date + live nutrition context appended uncached.
     // Cache hit saves ~90% on the ~4000 tokens of system prompt + tool definitions.
+    const start = dayStart || new Date(new Date().setHours(0,0,0,0)).toISOString();
+    const end = dayEnd || new Date(new Date().setHours(24,0,0,0)).toISOString();
+    const todaySummary = await db.prepare(`
+      SELECT COUNT(*) as entries,
+        ROUND(SUM(nl.servings * f.calories)::numeric, 1) as total_calories,
+        ROUND(SUM(nl.servings * f.protein_g)::numeric, 1) as total_protein_g
+      FROM nutrition_logs nl JOIN foods f ON f.id = nl.food_id
+      WHERE nl.user_id = ? AND nl.logged_at >= ?::timestamptz AND nl.logged_at < ?::timestamptz
+    `).get([userId, start, end]);
+
     const SYSTEM_PROMPT = [
       { type: 'text', text: BASE_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
-      ...(localDate ? [{ type: 'text', text: `\n\nToday's date (user's local time): ${localDate}.` }] : []),
+      { type: 'text', text: `\n\nToday's date (user's local time): ${localDate || 'unknown'}. Today's logged nutrition so far: ${todaySummary?.total_calories ?? 0} kcal, ${todaySummary?.total_protein_g ?? 0}g protein (${todaySummary?.entries ?? 0} log entries). Conversation history may span multiple days — food mentioned in older messages may have been logged on a previous day. Call get_nutrition_summary for the full item-by-item breakdown of today.` },
     ];
 
     // Mark the last tool definition for caching so all tool schemas are cached too
@@ -108,9 +118,12 @@ router.post('/chat', async (req, res, next) => {
 
     console.log('[agent] stop_reason:', response.stop_reason);
 
+    const allToolsCalled = [];
+
     while (response.stop_reason === 'tool_use') {
       const toolUseBlocks = response.content.filter(b => b.type === 'tool_use');
       const toolResults = [];
+      allToolsCalled.push(...toolUseBlocks.map(b => b.name));
       console.log('[agent] tools called:', toolUseBlocks.map(b => b.name).join(', '));
 
       for (const block of toolUseBlocks) {
@@ -142,7 +155,7 @@ router.post('/chat', async (req, res, next) => {
     await db.prepare('INSERT INTO conversations (id, user_id, role, content) VALUES (?, ?, ?, ?)')
       .run([uuidv4(), userId, 'assistant', assistantText]);
 
-    res.json({ message: assistantText });
+    res.json({ message: assistantText, tools_called: allToolsCalled });
   } catch (err) {
     next(err);
   }

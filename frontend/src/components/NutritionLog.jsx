@@ -36,6 +36,11 @@ export default function NutritionLog() {
     client.get('/nutrition/targets').then(r => setTargets(r.data)).catch(() => {});
   }, []);
 
+  useEffect(() => {
+    window.addEventListener('fitnessai:nutrition-updated', load);
+    return () => window.removeEventListener('fitnessai:nutrition-updated', load);
+  }, []);
+
   async function searchFoods(q) {
     if (!q || q.length < 2) { setSuggestions([]); return; }
     try {

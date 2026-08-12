@@ -242,10 +242,7 @@ async function executeTool(toolName, toolInput, userId, dateContext = {}) {
     await db.prepare(`
       INSERT INTO foods (id, user_id, name, calories, protein_g, carbs_g, fat_g, sugar_g, serving_size, serving_unit)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(user_id, name) DO UPDATE SET
-        calories = EXCLUDED.calories, protein_g = EXCLUDED.protein_g,
-        carbs_g = EXCLUDED.carbs_g, fat_g = EXCLUDED.fat_g, sugar_g = EXCLUDED.sugar_g,
-        serving_size = EXCLUDED.serving_size, serving_unit = EXCLUDED.serving_unit
+      ON CONFLICT(user_id, name) DO NOTHING
     `).run([foodId, userId, toolInput.name, toolInput.calories, toolInput.protein_g || 0, toolInput.carbs_g || 0, toolInput.fat_g || 0, toolInput.sugar_g || 0, toolInput.serving_size || 1, toolInput.serving_unit || 'serving']);
     const food = await db.prepare('SELECT id FROM foods WHERE user_id = ? AND name = ?').get([userId, toolInput.name]);
     const logId = uuidv4();

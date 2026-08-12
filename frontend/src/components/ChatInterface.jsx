@@ -34,6 +34,13 @@ export default function ChatInterface() {
       const dayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString();
       const { data } = await client.post('/agent/chat', { message: text, localDate, dayStart, dayEnd });
       setMessages(m => [...m, { role: 'assistant', content: data.message }]);
+      const tc = data.tools_called || [];
+      if (tc.some(t => ['log_food', 'get_nutrition_summary', 'set_nutrition_targets'].includes(t))) {
+        window.dispatchEvent(new CustomEvent('fitnessai:nutrition-updated'));
+      }
+      if (tc.includes('create_workout_plan')) {
+        window.dispatchEvent(new CustomEvent('fitnessai:workout-updated'));
+      }
     } catch (err) {
       setMessages(m => [...m, { role: 'assistant', content: '⚠️ Something went wrong. Try again.' }]);
     } finally {

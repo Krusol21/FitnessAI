@@ -180,6 +180,11 @@ export default function WorkoutPlan() {
 
   useEffect(() => { load(); }, []);
 
+  useEffect(() => {
+    window.addEventListener('fitnessai:workout-updated', load);
+    return () => window.removeEventListener('fitnessai:workout-updated', load);
+  }, []);
+
   function toggle(exerciseName) {
     setChecked(c => ({ ...c, [exerciseName]: !c[exerciseName] }));
   }
