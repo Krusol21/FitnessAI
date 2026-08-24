@@ -10,6 +10,15 @@ router.use(authenticate);
 
 const client = new Anthropic();
 
+function phaseForWeek(week) {
+  if (week <= 3) return 'Accumulation';
+  if (week <= 6) return 'Intensification';
+  if (week === 7) return 'Deload';
+  if (week <= 10) return 'Second Accumulation';
+  if (week <= 13) return 'Peaking';
+  return 'Full Rest';
+}
+
 const BASE_SYSTEM_PROMPT = `You are Coach AI — a seasoned strength and conditioning coach with deep knowledge of exercise science, powerlifting programming, and sports nutrition. You've worked with lifters at all levels and you communicate the way a great coach does: conversational, confident, and genuinely engaged. You don't rattle off bullet points — you talk like a person who knows their stuff and actually cares about the athlete in front of them.
 
 Your client runs a powerlifting-style 3-day split: Squat Day (Back Squat main lift, core/ab accessories), Bench Day (Bench Press main lift, tricep + shoulder health accessories), and Deadlift Day (Deadlift main lift, posterior chain/back/bicep accessories). Their 14-week cycle uses block periodization:
@@ -63,7 +72,9 @@ FOOD LOGGING — this is important: when the user mentions eating something, IMM
 
 When they mention a new PR, log it with update_pr. When they mention their body weight, log it with log_weight. Proactively notice patterns — low protein relative to training volume, calorie intake on rest days vs. training days, stalled PRs that might signal a programming adjustment. Always check which cycle week they're on before giving training advice. During deload week, don't suggest pushing intensity. During rest week, let recovery be the focus.
 
-CRITICAL — tool calls: Whenever you build or update a workout plan, you MUST call create_workout_plan with the full structured plan_json so it gets saved. Never describe a plan in text without also saving it. If a message asks for multiple things, complete every tool call before writing your reply.`;
+CRITICAL — tool calls: Whenever you build or update a workout plan, you MUST call create_workout_plan with the full structured plan_json so it gets saved. Never describe a plan in text without also saving it. If a message asks for multiple things, complete every tool call before writing your reply.
+
+BLOCK TRANSITIONS — the user's current cycle week and block (Accumulation/Intensification/Deload/etc.) are given to you at the start of every message. If you have any reason to think the active plan's saved main-lift sets/reps/RPE/intensity still reflect an earlier block (e.g. still Accumulation numbers like 5x5 @ RPE 7 while the current block is Intensification) — whether the user brings it up or you notice it yourself — call get_workout_plan to check the actual saved numbers, then call create_workout_plan to rebuild the plan for the current block, all in that same turn, before you reply. Never tell the user a plan is "updated" or "fixed" unless you actually called create_workout_plan in that same turn — noticing the week number changed is not the same as regenerating the plan.`;
 
 router.post('/chat', async (req, res, next) => {
   try {
@@ -85,9 +96,22 @@ router.post('/chat', async (req, res, next) => {
       WHERE nl.user_id = ? AND nl.logged_at >= ?::timestamptz AND nl.logged_at < ?::timestamptz
     `).get([userId, start, end]);
 
+    // Cheap server-side cycle-week/phase computation, injected uncached so the coach always
+    // knows the current block without spending a tool call to look it up.
+    const activePlan = await db.prepare(
+      'SELECT cycle_start_date FROM workout_plans WHERE user_id = ? AND is_active = 1 ORDER BY created_at DESC LIMIT 1'
+    ).get([userId]);
+    let cycleLine = '';
+    if (activePlan?.cycle_start_date) {
+      const days = Math.floor((Date.now() - new Date(activePlan.cycle_start_date)) / 86400000);
+      const cycleWeek = (Math.floor(days / 7) % 14) + 1;
+      const phase = phaseForWeek(cycleWeek);
+      cycleLine = ` Current program: Week ${cycleWeek} of 14 — ${phase} block (cycle started ${activePlan.cycle_start_date}). If the active plan's saved sets/reps/RPE don't match this block yet, that plan is stale — see the BLOCK TRANSITIONS rule below.`;
+    }
+
     const SYSTEM_PROMPT = [
       { type: 'text', text: BASE_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
-      { type: 'text', text: `\n\nToday's date (user's local time): ${localDate || 'unknown'}. Today's logged nutrition so far: ${todaySummary?.total_calories ?? 0} kcal, ${todaySummary?.total_protein_g ?? 0}g protein (${todaySummary?.entries ?? 0} log entries). Conversation history may span multiple days — food mentioned in older messages may have been logged on a previous day. Call get_nutrition_summary for the full item-by-item breakdown of today.` },
+      { type: 'text', text: `\n\nToday's date (user's local time): ${localDate || 'unknown'}. Today's logged nutrition so far: ${todaySummary?.total_calories ?? 0} kcal, ${todaySummary?.total_protein_g ?? 0}g protein (${todaySummary?.entries ?? 0} log entries). Conversation history may span multiple days — food mentioned in older messages may have been logged on a previous day. Call get_nutrition_summary for the full item-by-item breakdown of today.${cycleLine}` },
     ];
 
     // Mark the last tool definition for caching so all tool schemas are cached too
