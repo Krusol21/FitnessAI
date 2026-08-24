@@ -108,9 +108,13 @@ router.post('/chat', async (req, res, next) => {
     const dateContext = { localDate, dayStart, dayEnd };
 
     // Agentic tool-use loop
+    // thinking disabled: it was silently burning 1000+ output tokens per turn on hidden
+    // reasoning, leaving too little of the max_tokens budget for large tool calls (e.g.
+    // create_workout_plan's full plan_json) to finish before getting cut off.
     let response = await client.messages.create({
       model: 'claude-sonnet-5',
-      max_tokens: 4096,
+      max_tokens: 8192,
+      thinking: { type: 'disabled' },
       system: SYSTEM_PROMPT,
       tools: CACHED_TOOLS,
       messages,
@@ -140,7 +144,8 @@ router.post('/chat', async (req, res, next) => {
 
       response = await client.messages.create({
         model: 'claude-sonnet-5',
-        max_tokens: 4096,
+        max_tokens: 8192,
+        thinking: { type: 'disabled' },
         system: SYSTEM_PROMPT,
         tools: CACHED_TOOLS,
         messages,
